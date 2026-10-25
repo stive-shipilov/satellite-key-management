@@ -1,0 +1,17 @@
+[project]
+name = "satellite-key-management"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Stepan Shipilov", email = "s.shipilov@1440.space" }
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+satellite-key-management = "satellite_key_management:main"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
