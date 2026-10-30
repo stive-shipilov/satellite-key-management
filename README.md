@@ -26,8 +26,8 @@
 
 Клонируем репозиторий
 ```bash
-git clone https://github.com/stive-shipilov/Comp_math_project.git
-cd comp_math
+git clone git@github.com:stive-shipilov/satellite-key-management.git
+cd satellite-key-management
 ```
 ### Шаг 2: Запуск окружения
 
