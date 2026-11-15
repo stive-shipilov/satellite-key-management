@@ -49,22 +49,34 @@ def replay_attack(sim, t_min):
 """Трекер атакующего: накопление долей, счётчики, time-to-compromise."""
 import math
 
+"""Атаки и трекер атакующего с поддержкой refresh."""
+import math
+
 class AttackerTracker:
-    def __init__(self, sim, attacker_lat=-30.0, attacker_lon=-60.0, k_target=None):
+    def __init__(self, sim, attacker_lat=-30.0, attacker_lon=-60.0,
+                 k_target=None, refresh_every=None):
         self.sim = sim
         self.lat = attacker_lat
         self.lon = attacker_lon
         self.k_target = k_target if k_target is not None else sim.k
-        self.shares_collected = set()      # sid'ы, чьи доли уже утекли
+        self.refresh_every = refresh_every
+        self.shares_collected = set()
         self.attempts = 0
-        self.successes = 0                 # «успех» = утекла новая доля
-        self.failures = 0                  # попытки, где не хватило до k
-        self.history = []                  # (t, n_shares, n_visible)
+        self.successes = 0
+        self.failures = 0
+        self.refreshes = 0
+        self.history = []
 
     def step(self, t_min):
-        """Один шаг времени: проверить, кто в зоне, обновить счётчики."""
-        in_zone = self.sim.leo.visible_at(t_min, self.lat, self.lon, radius_km=COVER_RADIUS)
-        # доли утекают с каждого спутника в зоне (один раз)
+        # proactive refresh: обнуляем накопленные доли
+        refreshed = False
+        if self.refresh_every and t_min > 0 and t_min % self.refresh_every == 0:
+            if self.shares_collected:
+                self.shares_collected.clear()
+                self.refreshes += 1
+                refreshed = True
+
+        in_zone = self.sim.leo.visible_at(t_min, self.lat, self.lon, radius_km=2500)
         new_shares = [sid for sid in in_zone if sid not in self.shares_collected]
         if in_zone:
             self.attempts += 1
@@ -80,10 +92,10 @@ class AttackerTracker:
             "n_shares": len(self.shares_collected),
             "k": self.k_target,
             "compromised": len(self.shares_collected) >= self.k_target,
+            "refreshed": refreshed,
         }
 
     def time_to_compromise(self, times):
-        """Минуты до набора k долей или inf, если не набирается."""
         for t, n_shares, _ in self.history:
             if n_shares >= self.k_target:
                 return t
