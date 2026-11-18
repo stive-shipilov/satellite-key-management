@@ -16,6 +16,10 @@ def test_measured_sizes_and_actual_thresholds():
     assert all(min(r.split_us, r.recover_us) > 0 for r in rows)
 
 
+def test_decimal_threat_on_exact_budget_boundary():
+    assert choose_threshold(51, 8, 0.14) == 8
+
+
 def test_policy_is_feasible_and_monotone():
     for n in range(2, 16):
         for visible in range(n + 1):
@@ -49,7 +53,9 @@ def test_session_reissues_for_new_threshold_and_waits_without_quorum(monkeypatch
     sim.distribute_adaptive(0, 0.2)
     assert sim.secret_key == 9 and sim.k == sim.current_k == 2
     assert sim.collect_and_reconstruct(0) == (True, 3)
+    active_shares = sim.shares
     assert sim.distribute_adaptive(1) is None
-    assert sim.current_k is None and sim.collect_and_reconstruct(0) == (False, 0)
+    assert sim.shares is active_shares and sim.current_k == sim.k == 2
+    assert sim.secret_key == 9 and sim.collect_and_reconstruct(0) == (True, 3)
     sim.distribute_adaptive(0, 0.4)
     assert sim.secret_key == 8 and sim.k == 3 and sim.collect_and_reconstruct(0)[0]

@@ -41,11 +41,9 @@ class SessionSimulator:
         return choose_threshold(self.n, len(visible), threat_level, minimum=min(2, self.n))
 
     def distribute_adaptive(self, t_min, threat_level=0.0, gs_lat=55.0, gs_lon=37.0):
-        """Начать независимую сессию с новым ключом и вычисленным порогом."""
+        """Начать новую сессию или отложить её, сохранив ранее выданные доли."""
         threshold = self.dynamic_k(t_min, threat_level, gs_lat, gs_lon)
         if threshold is None:
-            self.shares = {}
-            self.current_k = None
             return None
         key = secrets.randbelow(P)
         shares = dict(enumerate(split_secret(key, self.n, threshold), 1))
