@@ -42,9 +42,9 @@ def plot_dynamic_k(sim, out="dynamic_k.png", t_total=120):
     ts = list(range(0, t_total, 2))
     ks = [sim.dynamic_k(t, threat_level=0.3) for t in ts]
     fig, ax = plt.subplots(figsize=(8, 4))
-    ax.plot(ts, ks, color="blue", linewidth=2)
+    ax.step(ts, [0 if k is None else k for k in ks], where="post", color="blue", linewidth=2)
     ax.set_xlabel("время, мин")
-    ax.set_ylabel("динамический k")
+    ax.set_ylabel("порог k (0 — сессия отложена)")
     ax.set_title("Динамика порога k")
     fig.tight_layout()
     fig.savefig(out, dpi=120)
@@ -52,19 +52,14 @@ def plot_dynamic_k(sim, out="dynamic_k.png", t_total=120):
     return out
 
 def plot_scheme_comparison(out="schemes_comparison.png"):
-    """Заглушка: Участник 2 подставит реальные метрики."""
-    schemes = ["Shamir", "Blakley", "XOR (N,N)"]
-    share_size = [16, 32, 16]
-    gen_time = [0.8, 1.2, 0.1]
-    fig, ax = plt.subplots(1, 2, figsize=(10, 4))
-    ax[0].bar(schemes, share_size, color=["green", "blue", "orange"])
-    ax[0].set_title("Размер доли, байт")
-    ax[1].bar(schemes, gen_time, color=["green", "blue", "orange"])
-    ax[1].set_title("Время генерации, мс")
-    fig.tight_layout()
-    fig.savefig(out, dpi=120)
-    plt.close(fig)
-    return out
+    """Сравнение по замерам при 128 битах и шести спутниках."""
+    if __package__ == "visualization":
+        from analysis.benchmark import measure
+        from analysis.plots import bar_chart
+    else:
+        from ..analysis.benchmark import measure
+        from ..analysis.plots import bar_chart
+    return bar_chart(measure(), out)
 
 def plot_attacker_accumulation(tracker, out="attacker_accumulation.png"):
     """Накопление долей у атакующего vs порог k."""
