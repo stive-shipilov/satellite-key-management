@@ -5,6 +5,24 @@ import numpy as np
 COLORS = ["#285d85", "#cc6137", "#31816c", "#76579b"]
 
 
+def visibility_chart(visibility, out):
+    groups = list(visibility.groupby("threat"))
+    fig, axes = plt.subplots(len(groups), 1, sharex=True, sharey=True,
+                             figsize=(9, 6.4), layout="constrained", squeeze=False)
+    for ax, (threat, group) in zip(axes[:, 0], groups):
+        ax.step(group.minute, group.visible, where="mid", color="#9ba7b1",
+                label="Видимые спутники")
+        ax.plot(group.minute, group.k.fillna(0), "o", ms=3, color=COLORS[0],
+                label="Выбранный порог (0 — ожидание)")
+        ax.set_ylabel(f"Угроза {threat:g}")
+        ax.set_yticks(range(int(visibility.visible.max()) + 1))
+    axes[0, 0].legend(loc="upper right", ncol=2, fontsize="small")
+    axes[-1, 0].set_xlabel("Время от начала моделирования, мин")
+    fig.suptitle("Доступность нового сеанса при одной и той же видимости")
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+
+
 def bar_chart(rows, out):
     fig, axes = plt.subplots(1, 3, figsize=(12, 4.1), layout="constrained")
     for ax, field, title in zip(

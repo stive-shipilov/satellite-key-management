@@ -1,6 +1,6 @@
 """Атаки на схему разделения секрета."""
 import secrets
-from crypto.shamir import reconstruct, P
+from satellite_key_management.crypto.shamir import reconstruct, P
 
 from satellite_key_management.visualization.animation_plotly import COVER_RADIUS
 
@@ -70,10 +70,11 @@ class AttackerTracker:
     def step(self, t_min):
         # proactive refresh: обнуляем накопленные доли
         refreshed = False
-        if self.refresh_every and t_min > 0 and t_min % self.refresh_every == 0:
-            if self.shares_collected:
+        if self.refresh_every and self.history:
+            crossed = t_min // self.refresh_every - self.history[-1][0] // self.refresh_every
+            if crossed > 0:
                 self.shares_collected.clear()
-                self.refreshes += 1
+                self.refreshes += crossed
                 refreshed = True
 
         in_zone = self.sim.leo.visible_at(t_min, self.lat, self.lon, radius_km=2500)
@@ -103,4 +104,5 @@ class AttackerTracker:
 
     @property
     def success_rate(self):
-        return self.successes / self.attempts if self.attempts else 0.0
+        """Доля отсчётов с контактом, в которых уже накоплен кворум."""
+        return (self.attempts - self.failures) / self.attempts if self.attempts else 0.0

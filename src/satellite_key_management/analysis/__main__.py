@@ -11,7 +11,7 @@ import pandas as pd
 from ..simulation.leo_model import LEOModel
 from ..simulation.session import SessionSimulator
 from .benchmark import measure
-from .plots import bar_chart, radar_chart
+from .plots import bar_chart, radar_chart, visibility_chart
 
 
 def run(out: Path, repeats: int, number: int):
@@ -47,6 +47,7 @@ def run(out: Path, repeats: int, number: int):
     visibility = pd.DataFrame(windows, columns=["minute", "visible", "threat", "k", "available"])
     visibility["k"] = visibility["k"].astype("Int64")
     visibility.to_csv(out / "visibility.csv", index=False)
+    visibility_chart(visibility, out / "visibility.png")
     sample = metrics[(metrics.bits == 128) & (metrics.n == 6) & (metrics.scenario_k == 3)]
     print(sample[["scheme", "threshold", "share_bytes", "split_us", "recover_us"]].to_string(index=False))
     print("Доля окон с достижимым порогом по уровням угрозы:")

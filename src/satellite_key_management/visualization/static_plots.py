@@ -8,7 +8,7 @@ def plot_compromise_step(sim, out="compromise_step.png"):
     ms = list(range(0, sim.n + 1))
     results = []
     for m in ms:
-        from attacks.attacks import compromise_m
+        from satellite_key_management.attacks.attacks import compromise_m
         ok, _ = compromise_m(sim, m)
         results.append(1 if ok else 0)
     fig, ax = plt.subplots(figsize=(8, 4))
@@ -24,7 +24,7 @@ def plot_compromise_step(sim, out="compromise_step.png"):
     return out
 
 def plot_refresh_sawtooth(sim, out="refresh_sawtooth.png"):
-    from attacks.attacks import share_accumulation
+    from satellite_key_management.attacks.attacks import share_accumulation
     hist = share_accumulation(sim)
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(hist, color="orange", linewidth=2)

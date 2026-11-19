@@ -88,7 +88,7 @@ def animate_with_metrics(sim, t_total=120, step=2, out_html="simulation_3d.html"
                          gs_lat=-30.0, gs_lon=-60.0, cone_deg=60, cone_rays=32,
                          refresh_every=30):
     """3D-сцена + 2D-панель метрик в одном HTML. Refresh-вспышки."""
-    from attacks.attacks import AttackerTracker
+    from satellite_key_management.attacks.attacks import AttackerTracker
 
     times = list(range(0, t_total, step))
     gs = sim.leo._gs_vector(gs_lat, gs_lon)
@@ -115,7 +115,7 @@ def animate_with_metrics(sim, t_total=120, step=2, out_html="simulation_3d.html"
         metric_t.append(t)
         metric_m.append(st["n_shares"])
 
-        traces = [earth]
+        traces = []
 
         # 1) все спутники
         traces.append(go.Scatter3d(
@@ -230,7 +230,8 @@ def animate_with_metrics(sim, t_total=120, step=2, out_html="simulation_3d.html"
             x=[0, t_total], y=[sim.k, sim.k], mode="lines",
             line=dict(color="green", dash="dash"), name=f"k={sim.k}"))
 
-        frames.append(go.Frame(name=str(t), data=traces))
+        # Нулевая поверхность неизменна и хранится один раз в начальной сцене.
+        frames.append(go.Frame(name=str(t), data=traces, traces=list(range(1, len(traces) + 1))))
 
     assert len({len(f.data) for f in frames}) == 1, \
         f"число трейсов в кадрах разное: {{len(f.data) for f in frames}}"
@@ -242,7 +243,7 @@ def animate_with_metrics(sim, t_total=120, step=2, out_html="simulation_3d.html"
         column_widths=[0.68, 0.32],
         subplot_titles=("LEO 3D: зона GS, линки, атака", "Накопление долей vs k"),
     )
-    for i, tr in enumerate(frames[0].data):
+    for i, tr in enumerate((earth, *frames[0].data)):
         if i < n_3d:
             fig.add_trace(tr, row=1, col=1)
         else:
@@ -274,6 +275,6 @@ def animate_with_metrics(sim, t_total=120, step=2, out_html="simulation_3d.html"
         paper_bgcolor="black", plot_bgcolor="black", font=dict(color="white"),
     )
 
-    fig.write_html(out_html, include_plotlyjs="cdn", auto_play=False)
+    fig.write_html(out_html, include_plotlyjs="directory", auto_play=False)
     print(f"Сохранено: {out_html}")
     return out_html, tracker

@@ -25,6 +25,8 @@ class Measurement:
     share_bytes: float
     split_us: float
     recover_us: float
+    split_mad_us: float
+    recover_mad_us: float
 
     @property
     def safe_shares(self):
@@ -34,6 +36,12 @@ class Measurement:
 
 def byte_width(max_value: int) -> int:
     return max(1, (max_value.bit_length() + 7) // 8)
+
+
+def _timings(operation, repeats, number):
+    samples = [t * 1e6 / number for t in repeat(operation, repeat=repeats, number=number)]
+    center = median(samples)
+    return center, median(abs(t - center) for t in samples)
 
 
 def measure(bits=128, n=6, k=3, repeats=7, number=30) -> list[Measurement]:
@@ -61,7 +69,8 @@ def measure(bits=128, n=6, k=3, repeats=7, number=30) -> list[Measurement]:
         recover = partial(reconstruct, selected)
         if recover() != secret:
             raise RuntimeError(f"Ошибка восстановления {name}")
-        split_us = median(repeat(split, repeat=repeats, number=number)) * 1e6 / number
-        recover_us = median(repeat(recover, repeat=repeats, number=number)) * 1e6 / number
-        results.append(Measurement(name, bits, n, k, threshold, size, split_us, recover_us))
+        split_us, split_mad = _timings(split, repeats, number)
+        recover_us, recover_mad = _timings(recover, repeats, number)
+        results.append(Measurement(name, bits, n, k, threshold, size, split_us, recover_us,
+                                   split_mad, recover_mad))
     return results
