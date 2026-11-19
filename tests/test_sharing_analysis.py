@@ -20,6 +20,13 @@ def test_decimal_threat_on_exact_budget_boundary():
     assert choose_threshold(51, 8, 0.14) == 8
 
 
+def test_single_satellite_threshold():
+    assert choose_threshold(1, 1, 1) == 1
+    assert choose_threshold(1, 0, 0) is None
+    with pytest.raises(ValueError):
+        choose_threshold(1, 1, 0, minimum=2)
+
+
 def test_policy_is_feasible_and_monotone():
     for n in range(2, 16):
         for visible in range(n + 1):

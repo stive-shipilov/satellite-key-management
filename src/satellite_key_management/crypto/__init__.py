@@ -17,8 +17,8 @@ Proactive refresh:
 Шифрование трафика (AES-GCM):
     * ``AESGCMCipher``, ``encrypt``, ``decrypt``.
 
-Пороговая подпись (threshold Schnorr):
-    * ``ThresholdSchnorr``, ``generate_key``, ``sign_share``, ``combine_signs``, ``verify``.
+Пороговая подпись (threshold BLS):
+    * ``VerificationKeys``, ``generate_key``, ``sign_share``, ``combine_signs``, ``verify``.
 """
 
 # --- Shamir над GF(p) и GF(2^8) ---------------------------------------------
@@ -52,7 +52,7 @@ from .aes_gcm import AESGCMCipher, InvalidTag, decrypt, encrypt
 
 # --- Пороговая подпись -------------------------------------------------------
 from .threshold_sig import (
-    ThresholdSchnorr,
+    VerificationKeys,
     combine_signs,
     generate_key,
     sign_share,
@@ -69,5 +69,5 @@ __all__ = [
     # AES-GCM
     "AESGCMCipher", "encrypt", "decrypt", "InvalidTag",
     # Threshold signature
-    "ThresholdSchnorr", "generate_key", "sign_share", "combine_signs", "verify",
+    "VerificationKeys", "generate_key", "sign_share", "combine_signs", "verify",
 ]

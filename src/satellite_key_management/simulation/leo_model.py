@@ -30,8 +30,11 @@ class LEOModel:
     def __init__(self, n_sats=12, seed=42, n_planes=3):
         rng = np.random.default_rng(seed)
         self.sats = []
-        per_plane = n_sats // n_planes
+        if n_sats < 1 or n_planes < 1:
+            raise ValueError('Число спутников и плоскостей должно быть положительным')
+        base, extra = divmod(n_sats, n_planes)
         for p in range(n_planes):
+            per_plane = base + int(p < extra)
             raan = p * (360.0 / n_planes)
             for i in range(per_plane):
                 phase = i * (360.0 / per_plane) + rng.uniform(-5, 5)

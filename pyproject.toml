@@ -16,14 +16,20 @@ dependencies = [
     "numpy>=2.2.6",
     "pillow>=12.3.0",
     "plotly>=7.1.0",
+    "py-ecc>=8,<9",
 ]
 
 [project.optional-dependencies]
 analysis = ["pandas>=2.2"]
 
 [project.scripts]
-satellite-key-management = "satellite_key_management:main"
+satellite-key-management = "satellite_key_management.main:main"
 
 [build-system]
 requires = ["uv_build>=0.12.1,<0.13.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
