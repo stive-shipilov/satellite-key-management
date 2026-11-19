@@ -63,3 +63,29 @@ def test_contact_windows_and_signed_delivery():
 
 def test_constellation_keeps_remainder():
     assert len(LEOModel(n_sats=7, n_planes=3).sats) == 7
+
+
+@pytest.mark.parametrize("invalid", [None, (), (1,), (1, "bad"), (1, 2, 3)])
+def test_malformed_record_does_not_block_honest_quorum(invalid):
+    sim = SessionSimulator(ContactSchedule(), 3, 2)
+    sim.distribute()
+    sim.shares[1] = invalid
+    assert sim.receive(sim.seal(b"payload"), [1, 2, 3]) == b"payload"
+
+
+def test_required_signature_checked_before_advancing_sequence():
+    from satellite_key_management.crypto.threshold_sig import generate_key, sign_share
+    from satellite_key_management.crypto.aes_gcm import encrypt
+
+    keys, shares = generate_key(1, 1)
+    sim = SessionSimulator(ContactSchedule(), 1, 1, initial_signer=keys.public_key)
+    sim.distribute()
+    sequence, _ = sim.seal(b"message")
+    with pytest.raises(ValueError, match="подпись"):
+        sim.receive((sequence, encrypt(sim.secret_key.to_bytes(16, "big"), b"message",
+                                      sequence.to_bytes(8, "big"))), [1])
+    assert sim.last_received == -1 and sim.relay is None
+    signature = sign_share(shares[0], b"message")[1]
+    corrected = encrypt(sim.secret_key.to_bytes(16, "big"), b"message" + signature,
+                        sequence.to_bytes(8, "big"))
+    assert sim.receive((sequence, corrected), [1]) == b"message"

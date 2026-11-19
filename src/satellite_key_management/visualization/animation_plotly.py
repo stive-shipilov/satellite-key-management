@@ -97,7 +97,6 @@ def animate_with_metrics(
     cone_deg=60,
     cone_rays=32,
     refresh_every=30,
-    contact_history=None,
 ):
     """Анимация орбит. Все спутники одного статуса находятся в одном слое."""
     from satellite_key_management.attacks.attacks import AttackerTracker
@@ -152,12 +151,7 @@ def animate_with_metrics(
             ),
         ]
         title = "Орбиты и наблюдение долей"
-        if contact_history is not None:
-            event = contact_history[t]
-            state = (
-                f"приём через №{event.relay}" if event.delivered else "ожидание кворума"
-            )
-            title += f"<br><sup>Синтетическая сессия · {t} мин · {state} · эпоха {event.epoch}</sup>"
+        title += f" · {t} мин · в зоне {st['n_visible']} · накоплено {counts[-1]}/{sim.k}"
         frames.append(
             go.Frame(
                 name=str(t),
@@ -278,35 +272,33 @@ def animate_with_metrics(
         updatemenus=[
             dict(
                 type="buttons",
-                buttons=[
-                    dict(
-                        label="Пуск",
-                        method="animate",
-                        args=[
-                            None,
-                            dict(
-                                fromcurrent=True,
-                                frame=dict(duration=160, redraw=True),
-                                transition=dict(duration=0),
-                            ),
-                        ],
-                    ),
-                    dict(
-                        label="Пауза",
-                        method="animate",
-                        args=[
-                            [None],
-                            dict(
-                                mode="immediate",
-                                frame=dict(duration=0, redraw=False),
-                                transition=dict(duration=0),
-                            ),
-                        ],
-                    ),
-                ],
+                buttons=[dict(label="Пуск", method="skip"), dict(label="Пауза", method="skip")],
             )
         ],
     )
-    fig.write_html(out_html, include_plotlyjs="directory", auto_play=False)
+    # Ставим в очередь один кадр. Пауза завершает текущий кадр без отмены очереди Plotly.
+    playback = """
+const chart = document.getElementById('{plot_id}');
+let generation = 0;
+chart.on('plotly_sliderstart', () => { generation++; });
+chart.on('plotly_buttonclicked', async ({button}) => {
+    const run = ++generation;
+    if (button.label !== 'Пуск') return;
+    const slider = chart.layout.sliders[0];
+    const active = slider.active ?? 0;
+    const start = active >= slider.steps.length - 1 ? 0 : active + 1;
+    for (let i = start; i < slider.steps.length && run === generation; i++) {
+        try {
+            await Plotly.animate(chart, [slider.steps[i].label], {
+                mode: 'afterall', frame: {duration: 160, redraw: true}, transition: {duration: 0}
+            });
+        } catch (error) {
+            if (run === generation) console.error('Ошибка воспроизведения кадра', error);
+            return;
+        }
+    }
+});
+"""
+    fig.write_html(out_html, include_plotlyjs="directory", auto_play=False, post_script=playback)
     print(f"Сохранено: {out_html}", flush=True)
     return out_html, tracker

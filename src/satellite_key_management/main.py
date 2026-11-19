@@ -32,7 +32,7 @@ def main():
           f"Смен обслуживающего узла: {sum(r.handover for r in history)}. Строю орбиты…", flush=True)
     animate_with_metrics(sim, t_total=args.minutes, step=args.step,
                          out_html=args.out / "simulation_3d.html",
-                         gs_lat=-30.0, gs_lon=-60.0, refresh_every=30, contact_history=history)
+                         gs_lat=-30.0, gs_lon=-60.0, refresh_every=30)
     build_metrics_dashboard(sim, t_total=args.minutes, step=args.step,
                             out_html=args.out / "metrics_dashboard.html", refresh_every=30)
     save_index(args.out, history)
