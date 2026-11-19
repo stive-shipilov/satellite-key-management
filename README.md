@@ -17,49 +17,26 @@
 
 [Блок участника 2 — запуск демонстрации, сравнение схем и материалы к защите](docs/participant-2/README.md)
 
-### Предварительные требования
+## Проверенная локальная сборка
 
-Перед началом убедитесь, что у вас установлены:
-- **Git** - для клонирования репозитория
-- **Python** - для работы с проектом
-- **uv** - современный менеджер пакетов для Python
+Четыре открытых PR объединены в ветке `integrated`. Каталог с этим README содержит исходники сборки. Клонирование `master` с GitHub загрузит версию без этих объединений. Подробный статус заданий команды и первоочередные доработки приведены в [отчёте](docs/INTEGRATION.md).
 
-### Шаг 1: Клонирование репозитория
+Для запуска нужны Python 3.10 и uv. В PowerShell на Windows при пути с кириллицей сначала включите UTF-8 для текущего окна.
 
-Клонируем репозиторий
-```bash
-git clone https://github.com/stive-shipilov/satellite-key-management.git
-cd satellite-key-management
-```
-### Шаг 2: Запуск окружения
-
-Создание виртуального окружения и установка зависимостей
-
-Если не установлен uv, то предварительно нужно его установить
-```bash
-pip install uv
-```
-Дальше переходим в директорию склонированного проекта и устанавливаем зависимости
-```bash
-uv sync
+```powershell
+$env:PYTHONUTF8 = "1"
 ```
 
-Активация виртуального окружения
+Из каталога этого README выполните:
 
-```bash
-source .venv/bin/activate  # Linux/macOS
-```
-```bash
-.venv\Scripts\activate     # Windows
-```
-### Шаг 3: Запуск тестов и Jupiter Notebook
-
-Запуск тестов
-```bash
-uv run pytest
+```console
+uv sync --locked --extra analysis
+uv run --locked python -m pytest -q
+uv run --locked python -m satellite_key_management.analysis.demo
+uv run --locked --extra analysis python -m satellite_key_management.analysis --out results
+uv run --locked satellite-key-management --out leo
 ```
 
-Запуск Jupyter
-```bash
-uv run jupyter notebook
-```
+Последняя команда записывает `leo/simulation_3d.html`, `leo/metrics_dashboard.html` и общую библиотеку `leo/plotly.min.js`. Откройте HTML в браузере и храните три файла вместе. По умолчанию модель охватывает 300 минут с шагом 3 минуты. Для короткой проверки можно добавить `--minutes 12 --step 3`. Команда `uv build` создаёт исходный и установочный архивы Python.
+
+Криптографические схемы и модель предназначены для учебного исследования. Модуль пороговой подписи требует замены протоколом с секретным одноразовым значением и независимой генерацией ключей. Подробности приведены в отчёте.
