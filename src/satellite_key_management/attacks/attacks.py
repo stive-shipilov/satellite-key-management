@@ -1,56 +1,51 @@
-"""Атаки на схему разделения секрета."""
-import secrets
-from satellite_key_management.crypto.shamir import reconstruct, P
-
-from satellite_key_management.visualization.animation_plotly import COVER_RADIUS
+"""Учебные проверки при пассивном чтении долей и наблюдении модельных окон."""
+import math
+from copy import copy
 
 
 def compromise_m(sim, m):
-    """Компрометация m спутников: сколько долей у атакующего, восстановим ли ключ."""
-    collected = [sim.shares[sid] for sid in list(sim.shares)[:m]]
-    if m >= sim.k:
-        recovered = reconstruct(collected[:sim.k])
-        return recovered == sim.secret_key, m
-    return False, m
+    if not 0 <= m <= sim.n:
+        raise ValueError("Число долей вне диапазона")
+    key, count = sim.verified_key(range(1, m + 1))
+    return key is not None and sim.vss.verify_reconstructed(key, sim.commitments), count
+
 
 def evil_dealer(sim, tamper_sid=3):
-    """Злой дилер подменяет одну долю. VSS должен поймать (тут — заглушка проверки)."""
-    bad = dict(sim.shares)
-    sid, (x, y) = list(bad.items())[tamper_sid - 1]
-    bad[sid] = (x, (y + 1) % P)         # подмена
-    # Простая проверка: пересобрать и сверить с известным секретом
-    recovered = reconstruct(list(bad.values())[:sim.k])
-    caught = recovered != sim.secret_key
-    return caught, recovered
+    """Проверить контрольный отрицательный пример по публичным обязательствам."""
+    i, value = sim.shares[tamper_sid]
+    candidate = (i, (value + 1) % sim.vss.q)
+    return not sim.vss.verify_share(candidate, sim.commitments), None
+
 
 def share_accumulation(sim, days=30, refresh_every=5):
-    """Накопление долей во времени; proactive refresh обнуляет старые доли."""
+    """Одно наблюдение в день. Между эпохами набор наблюдений сбрасывается."""
+    if refresh_every < 1 or days < 0:
+        raise ValueError("Некорректный период")
+    model = copy(sim)
+    model.distribute()
+    current = set()
     history = []
     for day in range(days):
-        if day % refresh_every == 0:
-            sim.distribute()            # refresh: новые доли
-        history.append(len(sim.shares))
+        if day and day % refresh_every == 0:
+            model.refresh()
+            current.clear()
+        current.add(day % model.n + 1)
+        history.append(len(current))
     return history
 
+
 def replay_attack(sim, t_min):
-    """Replay: повтор старого сообщения. Проверка nonce/счётчика (заглушка)."""
-    nonce = secrets.token_bytes(12)
-    seen = set()
-    def send(n):
-        if n in seen:
-            return False                # replay поймали
-        seen.add(n)
-        return True
-    ok1 = send(nonce)
-    ok2 = send(nonce)                   # повтор
-    return ok1, ok2
+    packet = sim.seal(str(t_min).encode())
+    members = range(1, sim.n + 1)
+    ok = sim.receive(packet, members) is not None
+    if not ok:
+        return False, False
+    try:
+        sim.receive(packet, members)
+    except ValueError:
+        return True, False
+    return True, True
 
-
-"""Трекер атакующего: накопление долей, счётчики, time-to-compromise."""
-import math
-
-"""Атаки и трекер атакующего с поддержкой refresh."""
-import math
 
 class AttackerTracker:
     def __init__(self, sim, attacker_lat=-30.0, attacker_lon=-60.0,
