@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
+    "cryptography>=42.0.0",
     "imageio[ffmpeg]>=2.38.0",
     "kaleido>=1.5.1",
     "matplotlib>=3.10.9",
