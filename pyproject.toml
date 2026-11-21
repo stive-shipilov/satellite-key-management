@@ -7,7 +7,15 @@ authors = [
     { name = "Stepan Shipilov", email = "s.shipilov@1440.space" }
 ]
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "imageio[ffmpeg]>=2.38.0",
+    "kaleido>=1.5.1",
+    "matplotlib>=3.10.9",
+    "moviepy>=1.0.3",
+    "numpy>=2.2.6",
+    "pillow>=12.3.0",
+    "plotly>=7.1.0",
+]
 
 [project.scripts]
 satellite-key-management = "satellite_key_management:main"
