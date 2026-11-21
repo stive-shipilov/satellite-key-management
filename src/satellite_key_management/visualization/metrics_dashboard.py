@@ -6,11 +6,11 @@ from plotly.subplots import make_subplots
 
 def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
                             t_total=300, step=3, radius_km=2500,
-                            out_html="metrics_dashboard.html"):
-    from attacks.attacks import AttackerTracker
+                            out_html="metrics_dashboard.html", refresh_every=None):
+    from satellite_key_management.attacks.attacks import AttackerTracker
 
     times = list(range(0, t_total, step))
-    tracker = AttackerTracker(sim, gs_lat, gs_lon)
+    tracker = AttackerTracker(sim, gs_lat, gs_lon, refresh_every=refresh_every)
 
     # прогон по времени
     acc_t, acc_m, zone_t, zone_n = [], [], [], []
@@ -24,14 +24,8 @@ def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
 
     # success rate vs k
     ks = list(range(1, sim.n + 1))
-    rates = []
-    for k in ks:
-        sim.k = k
-        tr = AttackerTracker(sim, gs_lat, gs_lon, k_target=k)
-        for t in range(0, t_total, step):
-            tr.step(t)
-        rates.append(1.0 if tr.time_to_compromise(None) != float("inf") else 0.0)
-    sim.k = tracker.k_target  # восстановить
+    peak = max(acc_m, default=0)
+    reached = [int(peak >= k) for k in ks]
 
     # heatmap (k, m)
     n = sim.n
@@ -45,7 +39,7 @@ def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
         subplot_titles=(
             "Накопление долей vs k",
             "Бюджет атакующего: max в зоне vs k",
-            "Success rate vs порог k",
+            "Достигнут ли порог за весь прогон (1/0)",
             "Граница стойкости: m ≥ k",
         ),
         specs=[[{"type": "xy"}, {"type": "xy"}],
@@ -69,16 +63,14 @@ def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
                              name=f"k={sim.k}"), row=1, col=2)
     fig.add_annotation(
         x=t_total, y=sim.k, row=1, col=2, showarrow=False,
-        text=f"max={max_in_zone} < k={sim.k} → атака невозможна"
-             if max_in_zone < sim.k else
-             f"max={max_in_zone} ≥ k={sim.k} → атака возможна",
+        text=f"Одновременно в зоне: до {max_in_zone}. Накоплено в одной эпохе: до {peak}.",
         font=dict(color="white", size=10), yshift=12,
     )
 
     # 3) success rate vs k
-    fig.add_trace(go.Scatter(x=ks, y=rates, mode="lines+markers",
+    fig.add_trace(go.Scatter(x=ks, y=reached, mode="lines+markers",
                              line=dict(color="crimson"),
-                             marker=dict(size=4), name="success rate"),
+                             marker=dict(size=4), name="порог достигнут"),
                   row=2, col=1)
 
     # 4) heatmap
@@ -86,7 +78,7 @@ def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
                              colorscale=[[0, "green"], [1, "red"]], showscale=False,
                              name="стойкость"), row=2, col=2)
 
-    ttc_str = "∞ (невозможно)" if ttc == float("inf") else f"{ttc} мин"
+    ttc_str = "за время прогона порог не достигнут" if ttc == float("inf") else f"{ttc} мин"
     fig.update_layout(
         title=(f"Метрики стойкости | success rate={tracker.success_rate:.0%} | "
                f"time-to-compromise={ttc_str} | попыток={tracker.attempts}, "
@@ -95,6 +87,6 @@ def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
         showlegend=False, height=800,
     )
     fig.update_xaxes(color="white"); fig.update_yaxes(color="white")
-    fig.write_html(out_html, include_plotlyjs="cdn")
+    fig.write_html(out_html, include_plotlyjs="directory")
     print(f"Сохранено: {out_html}")
     return out_html, tracker

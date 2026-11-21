@@ -70,7 +70,7 @@ class FeldmanVSS:
         g^{s_i} должно равняться Π_j (g^{a_j})^{i^j} mod p. Секрет не раскрывается.
         """
         i, s_i = share
-        if not (i >= 1):
+        if not commitments or not 1 <= i < self.q or not 0 <= s_i < self.q:
             return False
         lhs = pow(self.g, s_i, self.p)
         rhs = 1

@@ -5,9 +5,9 @@ import numpy as np
 
 
 def run_dash(gs_lat=-30.0, gs_lon=-60.0, radius_km=2500, port=8050):
-    from simulation.leo_model import LEOModel
-    from simulation.session import SessionSimulator
-    from attacks.attacks import AttackerTracker
+    from satellite_key_management.simulation.leo_model import LEOModel
+    from satellite_key_management.simulation.session import SessionSimulator
+    from satellite_key_management.attacks.attacks import AttackerTracker
 
     app = Dash(__name__)
 
