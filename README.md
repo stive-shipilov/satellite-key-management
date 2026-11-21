@@ -15,6 +15,8 @@
 
 Результат: симуляция на Python с анимацией и графиками, сравнительный анализ трёх схем, метрики стойкости и производительности.
 
+[Блок участника 2 — запуск демонстрации, сравнение схем и материалы к защите](docs/participant-2/README.md)
+
 ### Предварительные требования
 
 Перед началом убедитесь, что у вас установлены:
@@ -26,8 +28,8 @@
 
 Клонируем репозиторий
 ```bash
-git clone https://github.com/stive-shipilov/Comp_math_project.git
-cd comp_math
+git clone https://github.com/stive-shipilov/satellite-key-management.git
+cd satellite-key-management
 ```
 ### Шаг 2: Запуск окружения
 
