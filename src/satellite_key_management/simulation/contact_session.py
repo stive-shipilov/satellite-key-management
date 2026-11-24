@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from random import Random
 
 from ..crypto.threshold_sig import generate_key, sign_share, combine_signs
-from .session import SessionSimulator
+from .session import ReplayRejected, SessionSimulator
 
 
 class ContactSchedule:
@@ -34,6 +34,7 @@ class Contact:
     delivered: bool
     signature_verified: bool
     replay_rejected: bool
+    replay_reason: str | None = None
 
 
 def session_history(minutes, refresh_every=30):
@@ -54,8 +55,9 @@ def session_history(minutes, refresh_every=30):
         message = f"telemetry/minute={t}".encode()
         signature = None
         if not signed and len(visible) >= sim.k:
-            partials = [sign_share(shares[i - 1], message) for i in visible[: sim.k]]
-            signature = combine_signs(partials, message, public)
+            signed_payload = sim.signing_payload(sim.next_sequence, message)
+            partials = [sign_share(shares[i - 1], signed_payload) for i in visible[: sim.k]]
+            signature = combine_signs(partials, signed_payload, public)
         packet = sim.seal(message + (signature or b""))
         received = sim.receive(packet, visible)
         checked = rejected = False
@@ -64,7 +66,7 @@ def session_history(minutes, refresh_every=30):
                 checked = signed = True
                 try:
                     sim.receive(packet, visible)
-                except ValueError:
+                except ReplayRejected:
                     rejected = True
                 if not rejected:
                     raise RuntimeError("Приёмник повторно принял пакет")
@@ -80,6 +82,7 @@ def session_history(minutes, refresh_every=30):
                 received is not None,
                 checked,
                 rejected,
+                "duplicate" if rejected else None,
             )
         )
     return history

@@ -43,7 +43,7 @@ table{font:14px monospace;margin:.6rem 0} th{background:#eaf5f2}
 <h2>Сравнение 5 схем на LEO-модели (одна видимость)</h2>
 <table border="1" cellpadding="6" style="border-collapse:collapse">
 <tr><th>схема</th><th>k</th><th>доля, байт</th><th>split, мкс</th><th>recover, мкс</th></tr>
-<tr><td>shamir</td><td>3</td><td>33.0</td><td>3.9</td><td>3.3</td></tr><tr><td>blakley</td><td>3</td><td>128.0</td><td>13.1</td><td>9.7</td></tr><tr><td>feldman_vss</td><td>3</td><td>96.0</td><td>121.8</td><td>3.0</td></tr><tr><td>xor</td><td>6</td><td>17.0</td><td>5.0</td><td>1.9</td></tr><tr><td>crt</td><td>6</td><td>17.0</td><td>5.4</td><td>3.8</td></tr>
+<tr><td>shamir</td><td>3</td><td>33.0</td><td>21.0</td><td>18.1</td></tr><tr><td>blakley</td><td>3</td><td>128.0</td><td>63.6</td><td>51.9</td></tr><tr><td>feldman_vss</td><td>3</td><td>96.0</td><td>422.8</td><td>21.3</td></tr><tr><td>xor</td><td>6</td><td>17.0</td><td>19.2</td><td>18.7</td></tr><tr><td>crt</td><td>6</td><td>17.0</td><td>28.2</td><td>25.7</td></tr>
 </table>
 <p><a href="schemes_on_leo.png">Гистограмма</a> · <a href="schemes_on_leo.csv">CSV</a></p>
 
@@ -52,7 +52,7 @@ table{font:14px monospace;margin:.6rem 0} th{background:#eaf5f2}
 <table border="1" cellpadding="6" style="border-collapse:collapse">
 <tr><th>схема</th><th>бит</th><th>n</th><th>k</th><th>доля, байт</th>
 <th>split, мкс</th><th>recover, мкс</th></tr>
-<tr><td>Шамир</td><td>128</td><td>6</td><td>3</td><td>33.0</td><td>3.4</td><td>2.8</td></tr><tr><td>Блэкли</td><td>128</td><td>6</td><td>3</td><td>128.0</td><td>12.7</td><td>9.7</td></tr><tr><td>XOR</td><td>128</td><td>6</td><td>6</td><td>17.0</td><td>4.3</td><td>1.0</td></tr><tr><td>CRT</td><td>128</td><td>6</td><td>6</td><td>26.0</td><td>4.9</td><td>2.9</td></tr>
+<tr><td>Шамир</td><td>128</td><td>6</td><td>3</td><td>33.0</td><td>16.9</td><td>13.6</td></tr><tr><td>Блэкли</td><td>128</td><td>6</td><td>3</td><td>128.0</td><td>54.0</td><td>47.7</td></tr><tr><td>XOR</td><td>128</td><td>6</td><td>6</td><td>17.0</td><td>11.3</td><td>6.5</td></tr><tr><td>CRT</td><td>128</td><td>6</td><td>6</td><td>26.0</td><td>16.0</td><td>11.9</td></tr>
 </table>
 <p><a href="benchmark.csv">Полный CSV</a> · <a href="radar.png">Radar</a></p>
 

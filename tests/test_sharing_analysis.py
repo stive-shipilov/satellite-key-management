@@ -66,3 +66,52 @@ def test_session_reissues_for_new_threshold_and_waits_without_quorum(monkeypatch
     assert sim.secret_key == 9 and sim.collect_and_reconstruct(0) == (True, 3)
     sim.distribute_adaptive(0, 0.4)
     assert sim.secret_key == 8 and sim.k == 3 and sim.collect_and_reconstruct(0)[0]
+
+
+@pytest.mark.parametrize("name", ["xor", "crt"])
+def test_all_party_schemes_keep_their_threshold(name):
+    sim = SessionSimulator(None, n=3, k=3, scheme=name)
+    sim.distribute()
+    session_id = sim.session_id
+    assert sim.distribute_adaptive(0, visible=[1, 2]) is None
+    assert sim.session_id == session_id
+    sim.distribute_adaptive(1, visible=[1, 2, 3])
+    assert sim.session_id != session_id and sim.k == sim.scheme.k == 3
+    assert sim.receive(sim.seal(b"message"), [1, 2, 3]) == b"message"
+
+
+def test_failed_redistribution_leaves_active_session_usable(monkeypatch):
+    from satellite_key_management.crypto.schemes import SchemeAdapter
+
+    sim = SessionSimulator(None, n=3, k=2)
+    sim.distribute()
+    packet = sim.seal(b"existing session")
+    session_id, epoch, scheme = sim.session_id, sim.epoch, sim.scheme
+
+    def fail_new_distribution(self, key):
+        raise ValueError("Раздача прервана")
+
+    monkeypatch.setattr(SchemeAdapter, "split", fail_new_distribution)
+    with pytest.raises(ValueError, match="Раздача прервана"):
+        sim.distribute_adaptive(0, visible=[1, 2, 3])
+    assert (sim.session_id, sim.epoch, sim.scheme) == (session_id, epoch, scheme)
+    assert sim.receive(packet, [1, 2]) == b"existing session"
+
+
+def test_orbital_comparison_pairs_exposures_and_measures_delivery():
+    from satellite_key_management.simulation.orbital_experiment import compare_orbital_sessions
+
+    class Sky:
+        sats = range(4)
+
+        def visible_at(self, minute):
+            return [1, 2, 3] if minute % 2 == 0 else [1, 2]
+
+    rows, tracker = compare_orbital_sessions(Sky(), 33, k=3, threat=0)
+    cases = {row.policy: row for row in rows if row.exposure_interval == 15}
+    assert cases["fixed"].first_quorum_minute == 31
+    assert cases["fixed_refresh"].first_quorum_minute is None
+    assert cases["fixed"].delivered == cases["fixed_refresh"].delivered == 17
+    assert cases["adaptive_refresh"].delivered == 33
+    assert cases["fixed"].longest_outage == 1 and cases["adaptive_refresh"].longest_outage == 0
+    assert tracker.refreshes == 1 and tracker.history[30].epoch == 2

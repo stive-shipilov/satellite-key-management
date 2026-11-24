@@ -6,21 +6,20 @@ from plotly.subplots import make_subplots
 
 def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
                             t_total=300, step=3, radius_km=2500,
-                            out_html="metrics_dashboard.html", refresh_every=None):
-    from satellite_key_management.attacks.attacks import AttackerTracker
+                            out_html="metrics_dashboard.html", refresh_every=None, *, tracker=None):
+    from satellite_key_management.attacks.attacks import track_visibility
 
-    times = list(range(0, t_total, step))
-    tracker = AttackerTracker(sim, gs_lat, gs_lon, refresh_every=refresh_every)
-
-    # прогон по времени
-    acc_t, acc_m, zone_t, zone_n = [], [], [], []
-    for t in times:
-        st = tracker.step(t)
-        acc_t.append(t); acc_m.append(st["n_shares"])
-        zone_t.append(t); zone_n.append(st["n_visible"])
+    if min(step, t_total) < 1:
+        raise ValueError("Шаг и длительность должны быть положительными")
+    if tracker is None:
+        tracker = track_visibility(sim, t_total, gs_lat, gs_lon, radius_km=radius_km,
+                                   refresh_every=refresh_every)
+    times = [sample.minute for sample in tracker.history]
+    acc_m = [sample.shares for sample in tracker.history]
+    zone_n = [len(sample.visible) for sample in tracker.history]
 
     max_in_zone = max(zone_n) if zone_n else 0
-    ttc = tracker.time_to_compromise(None)
+    ttc = tracker.time_to_compromise()
 
     # success rate vs k
     ks = list(range(1, sim.n + 1))
@@ -37,8 +36,8 @@ def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
     fig = make_subplots(
         rows=2, cols=2,
         subplot_titles=(
-            "Накопление долей vs k",
-            "Бюджет атакующего: max в зоне vs k",
+            "Раскрытые по сценарию доли и порог",
+            "Видимость спутников",
             "Достигнут ли порог за весь прогон (1/0)",
             "Граница стойкости: m ≥ k",
         ),
@@ -47,20 +46,17 @@ def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
     )
 
     # 1) накопление
-    fig.add_trace(go.Scatter(x=acc_t, y=acc_m, mode="lines+markers",
-                             line=dict(color="red"), marker=dict(size=3),
-                             name="долей у GS"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=times, y=acc_m, mode="lines",
+                             line=dict(color="red", shape="hv"),
+                             name="раскрыто долей"), row=1, col=1)
     fig.add_trace(go.Scatter(x=[0, t_total], y=[sim.k, sim.k], mode="lines",
                              line=dict(color="green", dash="dash"),
                              name=f"k={sim.k}"), row=1, col=1)
 
     # 2) бюджет
-    fig.add_trace(go.Scatter(x=zone_t, y=zone_n, mode="lines",
+    fig.add_trace(go.Scatter(x=times[::step], y=zone_n[::step], mode="lines",
                              line=dict(color="orange", shape="hv"),
-                             name="в зоне"), row=1, col=2)
-    fig.add_trace(go.Scatter(x=[0, t_total], y=[sim.k, sim.k], mode="lines",
-                             line=dict(color="green", dash="dash"),
-                             name=f"k={sim.k}"), row=1, col=2)
+                             name="видно узлов"), row=1, col=2)
     fig.add_annotation(
         x=t_total, y=sim.k, row=1, col=2, showarrow=False,
         text=f"Одновременно в зоне: до {max_in_zone}. Накоплено в одной эпохе: до {peak}.",
@@ -78,11 +74,9 @@ def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
                              colorscale=[[0, "green"], [1, "red"]], showscale=False,
                              name="стойкость"), row=2, col=2)
 
-    ttc_str = "за время прогона порог не достигнут" if ttc == float("inf") else f"{ttc} мин"
+    ttc_str = "за время прогона порог не достигнут" if ttc is None else f"{ttc} мин"
     fig.update_layout(
-        title=(f"Метрики стойкости | success rate={tracker.success_rate:.0%} | "
-               f"time-to-compromise={ttc_str} | попыток={tracker.attempts}, "
-               f"утекло={tracker.successes}, провалов={tracker.failures}"),
+        title=f"Первый кворум из раскрытых долей · {ttc_str} · обновлений {tracker.refreshes}",
         paper_bgcolor="black", plot_bgcolor="black", font=dict(color="white"),
         showlegend=False, height=800,
     )

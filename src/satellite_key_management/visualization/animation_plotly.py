@@ -1,10 +1,4 @@
-"""Plotly 3D: Земля, кольца покрытия, линки атак, сбор долей, ползунок времени.
-
-Одна наземная станция (GS) — она же атакующий.
-Спутники, попадающие в её зону видимости, подсвечиваются красным:
-  * точка спутника — красный ореол + жёлтое ядро с красной обводкой;
-  * линк спутник↔GS — широкий полупрозрачный + яркий красный слой.
-"""
+"""Plotly 3D: геометрия видимости станции и события раскрытия долей."""
 
 from pathlib import Path
 import numpy as np
@@ -97,23 +91,25 @@ def animate_with_metrics(
     cone_deg=60,
     cone_rays=32,
     refresh_every=30,
+    *,
+    tracker=None,
 ):
     """Анимация орбит. Все спутники одного статуса находятся в одном слое."""
-    from satellite_key_management.attacks.attacks import AttackerTracker
+    from satellite_key_management.attacks.attacks import track_visibility
 
     if min(step, t_total) <= 0:
         raise ValueError("Длительность и шаг должны быть положительными")
-    tracker = AttackerTracker(sim, gs_lat, gs_lon, refresh_every=refresh_every)
+    if tracker is None:
+        tracker = track_visibility(sim, t_total, gs_lat, gs_lon, refresh_every=refresh_every)
     gs = sim.leo._gs_vector(gs_lat, gs_lon)
     times = range(0, t_total, step)
     stride = max(1, (len(times) + 179) // 180)
-    frames, counts = [], []
+    frames = []
     for index, t in enumerate(times):
-        st = tracker.step(t)
-        counts.append(st["n_shares"])
         if index % stride and index != len(times) - 1:
             continue
-        visible = set(st["in_zone"])
+        sample = tracker.history[t]
+        visible = set(sample.visible)
         points = np.array([sat.position(t) for sat in sim.leo.sats])
         colors = [
             "#ff876d" if sat.sid in visible else "#6eddd2" for sat in sim.leo.sats
@@ -144,14 +140,16 @@ def animate_with_metrics(
             ),
             go.Scatter(
                 x=[t],
-                y=[counts[-1]],
+                y=[sample.shares],
                 mode="markers",
                 marker=dict(size=11),
                 name="Текущий момент",
             ),
         ]
-        title = "Орбиты и наблюдение долей"
-        title += f" · {t} мин · в зоне {st['n_visible']} · накоплено {counts[-1]}/{sim.k}"
+        title = (f"Орбиты и модель раскрытия долей · {t} мин · эпоха {sample.epoch}"
+                 f" · видимых узлов {len(visible)} · раскрыто долей {sample.shares}/{sample.threshold}")
+        if sample.key_exposed:
+            title += " · ключ раскрыт по модели"
         frames.append(
             go.Frame(
                 name=str(t),
@@ -167,7 +165,7 @@ def animate_with_metrics(
         column_widths=[0.64, 0.36],
         subplot_titles=[
             "Вид сверху на орбиты",
-            "Различные наблюдаемые доли текущей эпохи",
+            "Раскрытые по сценарию доли текущей эпохи",
         ],
     )
     fig.add_trace(earth_surface(n=48), row=1, col=1)
@@ -185,7 +183,8 @@ def animate_with_metrics(
     )
     fig.add_trace(
         go.Scatter(
-            x=list(times), y=counts, mode="lines", name="Накопление", line_shape="hv"
+            x=list(range(t_total)), y=[sample.shares for sample in tracker.history[:t_total]],
+            mode="lines", name="Раскрыто долей", line_shape="hv"
         ),
         row=1,
         col=2,
@@ -207,7 +206,7 @@ def animate_with_metrics(
     ring = _coverage_ring(gs)
     fig.add_trace(
         go.Scatter3d(
-            x=ring[:, 0], y=ring[:, 1], z=ring[:, 2], mode="lines", name="Зона станции"
+            x=ring[:, 0], y=ring[:, 1], z=ring[:, 2], mode="lines", name=f"Кольцо {COVER_RADIUS:g} км"
         ),
         row=1,
         col=1,

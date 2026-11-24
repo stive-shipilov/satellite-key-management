@@ -64,6 +64,13 @@ class TestFeldmanVSS:
         with pytest.raises(ValueError):
             dealer_commit(1, 4, 5)
 
+    def test_small_group_requires_nonzero_participant_indices(self):
+        group = FeldmanVSS(p=23, q=11, g=2)
+        with pytest.raises(ValueError, match="n < q"):
+            group.dealer_commit(1, n=11, k=2)
+        with pytest.raises(ValueError, match="подгруппой"):
+            FeldmanVSS(p=23, q=11, g=5)
+
     def test_module_reconstruct(self):
         n, k = 5, 3
         secret = 444

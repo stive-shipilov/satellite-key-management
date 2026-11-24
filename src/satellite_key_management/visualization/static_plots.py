@@ -2,7 +2,6 @@
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 
 def plot_compromise_step(sim, out="compromise_step.png"):
     ms = list(range(0, sim.n + 1))
@@ -38,14 +37,14 @@ def plot_refresh_sawtooth(sim, out="refresh_sawtooth.png"):
     plt.close(fig)
     return out
 
-def plot_dynamic_k(sim, out="dynamic_k.png", t_total=120):
-    ts = list(range(0, t_total, 2))
-    ks = [sim.dynamic_k(t, threat_level=0.3) for t in ts]
+def plot_dynamic_k(sim, out="dynamic_k.png", t_total=120, *, threat=0.3):
+    ts = list(range(t_total))
+    ks = [sim.dynamic_k(t, threat_level=threat) for t in ts]
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.step(ts, [0 if k is None else k for k in ks], where="post", color="blue", linewidth=2)
     ax.set_xlabel("время, мин")
     ax.set_ylabel("порог k (0 — сессия отложена)")
-    ax.set_title("Динамика порога k")
+    ax.set_title(f"Динамика порога k при уровне угрозы {threat:g}")
     fig.tight_layout()
     fig.savefig(out, dpi=120)
     plt.close(fig)
@@ -64,13 +63,12 @@ def plot_scheme_comparison(out="schemes_comparison.png"):
 def plot_attacker_accumulation(tracker, out="attacker_accumulation.png"):
     """Накопление долей у атакующего vs порог k."""
     import matplotlib.pyplot as plt
-    ts = [h[0] for h in tracker.history]
-    ns = [h[1] for h in tracker.history]
+    ts = [sample.minute for sample in tracker.history]
+    ns = [sample.shares for sample in tracker.history]
+    thresholds = [sample.threshold for sample in tracker.history]
     fig, ax = plt.subplots(figsize=(9, 4))
-    ax.plot(ts, ns, color="red", linewidth=2, label="долей у атакующего")
-    ax.axhline(tracker.k_target, color="green", linestyle="--", label=f"порог k={tracker.k_target}")
-    ax.fill_between(ts, ns, tracker.k_target, where=[n < tracker.k_target for n in ns],
-                    color="red", alpha=0.1)
+    ax.step(ts, ns, where="post", color="red", linewidth=2, label="раскрыто долей по сценарию")
+    ax.step(ts, thresholds, where="post", color="green", linestyle="--", label="порог k")
     ax.set_xlabel("время, мин"); ax.set_ylabel("долей")
     ax.set_title("Накопление долей атакующим vs порог k")
     ax.legend(); fig.tight_layout(); fig.savefig(out, dpi=120); plt.close(fig)
@@ -80,26 +78,26 @@ def plot_attacker_accumulation(tracker, out="attacker_accumulation.png"):
 def plot_attacker_zone_presence(tracker, out="attacker_zone_presence.png"):
     """Сколько спутников было в зоне атакующего по времени."""
     import matplotlib.pyplot as plt
-    ts = [h[0] for h in tracker.history]
-    nv = [h[2] for h in tracker.history]
+    ts = [sample.minute for sample in tracker.history]
+    nv = [len(sample.visible) for sample in tracker.history]
     fig, ax = plt.subplots(figsize=(9, 3))
     ax.step(ts, nv, where="post", color="orange")
     ax.set_xlabel("время, мин"); ax.set_ylabel("спутников в зоне")
-    ax.set_title("Окна уязвимости: спутники в зоне атакующего")
+    ax.set_title("Спутники в зоне наблюдения")
     fig.tight_layout(); fig.savefig(out, dpi=120); plt.close(fig)
     return out
 
 
 def plot_attacker_metrics_summary(tracker, out="attacker_metrics.png"):
-    """Сводка: попытки, успехи, провалы, success rate, time-to-compromise."""
+    """Сводка по отсчётам модели и достигнутым кворумам."""
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(8, 3))
-    labels = ["попытки", "утекло долей", "провалов"]
-    values = [tracker.attempts, tracker.successes, tracker.failures]
+    labels = ["отсчётов", "с видимостью", "с кворумом"]
+    values = [len(tracker.history), sum(bool(sample.visible) for sample in tracker.history),
+              sum(sample.quorum_reached for sample in tracker.history)]
     ax.bar(labels, values, color=["gray", "red", "green"])
-    ttc = tracker.time_to_compromise(None)
-    ttc_str = "∞ (невозможно)" if ttc == float("inf") else f"{ttc} мин"
-    ax.set_title(f"Метрики атакующего | success rate={tracker.success_rate:.0%} | "
-                 f"time-to-compromise={ttc_str}")
+    ttc = tracker.time_to_compromise()
+    ttc_str = "нет за время прогона" if ttc is None else f"{ttc} мин"
+    ax.set_title(f"Первый кворум из раскрытых долей · {ttc_str}")
     fig.tight_layout(); fig.savefig(out, dpi=120); plt.close(fig)
     return out
