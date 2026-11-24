@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import secrets
+from dataclasses import dataclass
 from uuid import uuid4
 
 from satellite_key_management.analysis.threshold import choose_threshold
@@ -22,6 +23,12 @@ from satellite_key_management.crypto.schemes import SCHEMES, SchemeAdapter, Shar
 
 class ReplayRejected(ValueError):
     """Пакет уже принят или вышел за границу окна приёма."""
+
+
+@dataclass(frozen=True)
+class Reception:
+    message: bytes | None
+    valid_shares: int
 
 
 class SessionSimulator:
@@ -168,6 +175,9 @@ class SessionSimulator:
         return sequence, encrypted
 
     def receive(self, packet, visible):
+        return self.receive_with_status(packet, visible).message
+
+    def receive_with_status(self, packet, visible) -> Reception:
         sequence, encrypted = packet
         aad = self._packet_context(sequence)
         offset = self.last_received - sequence
@@ -176,7 +186,7 @@ class SessionSimulator:
         valid = self._valid_shares(visible)
         key = self._recover_verified(valid)
         if key is None:
-            return None
+            return Reception(None, len(valid))
         message = decrypt(self._key_bytes(key), *encrypted, aad)
         if self.last_received < 0 and self.initial_signer is not None:
             if len(message) < 96 or not verify(
@@ -192,7 +202,7 @@ class SessionSimulator:
             self.last_received = sequence
         else:
             self._received |= 1 << offset
-        return message
+        return Reception(message, len(valid))
 
     # -- динамический порог ------------------------------------------------
     def dynamic_k(self, t_min, threat_level=0.0, gs_lat=55.0, gs_lon=37.0):

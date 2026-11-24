@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from random import Random
 
 from ..crypto.threshold_sig import generate_key, sign_share, combine_signs
+from ..visualization.report import write_plotly_page
 from .session import ReplayRejected, SessionSimulator
 
 
@@ -93,7 +94,7 @@ def save_contact_history(history, out):
     from plotly.subplots import make_subplots
 
     with (out / "contacts.csv").open("w", newline="", encoding="utf-8") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(asdict(history[0])))
+        writer = csv.DictWriter(stream, fieldnames=list(asdict(history[0])), lineterminator="\n")
         writer.writeheader()
         writer.writerows(map(asdict, history))
     fig = make_subplots(
@@ -153,4 +154,4 @@ def save_contact_history(history, out):
         height=640,
         legend=dict(orientation="h", y=-0.15),
     )
-    fig.write_html(out / "contacts.html", include_plotlyjs="directory")
+    write_plotly_page(fig, out / "contacts.html", "Связь наземной станции")

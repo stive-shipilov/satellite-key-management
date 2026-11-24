@@ -6,6 +6,8 @@ import plotly.graph_objects as go
 from PIL import Image
 from plotly.subplots import make_subplots
 
+from .report import write_plotly_page
+
 R_EARTH = 6371.0
 COVER_RADIUS = 2500.0
 ATTACK_COLOR = "red"
@@ -104,16 +106,14 @@ def animate_with_metrics(
     gs = sim.leo._gs_vector(gs_lat, gs_lon)
     times = range(0, t_total, step)
     stride = max(1, (len(times) + 179) // 180)
+    event_times = {sample.minute for sample in tracker.history[:t_total] if sample.new_exposures}
+    frame_times = sorted(set(times[::stride]) | event_times | {times[-1]})
     frames = []
-    for index, t in enumerate(times):
-        if index % stride and index != len(times) - 1:
-            continue
+    for t in frame_times:
         sample = tracker.history[t]
         visible = set(sample.visible)
+        exposed = set(sample.new_exposures)
         points = np.array([sat.position(t) for sat in sim.leo.sats])
-        colors = [
-            "#ff876d" if sat.sid in visible else "#6eddd2" for sat in sim.leo.sats
-        ]
         links = [[], [], []]
         for sat, point in zip(sim.leo.sats, points):
             if sat.sid in visible:
@@ -125,9 +125,15 @@ def animate_with_metrics(
                 y=points[:, 1],
                 z=points[:, 2],
                 mode="markers",
-                text=[f"Спутник {sat.sid}" for sat in sim.leo.sats],
+                text=[f"Спутник {sat.sid} · {'виден' if sat.sid in visible else 'вне видимости'}"
+                      + (" · раскрыта доля" if sat.sid in exposed else "") for sat in sim.leo.sats],
                 hoverinfo="text",
-                marker=dict(size=4, color=colors),
+                marker=dict(
+                    size=[8 if sat.sid in exposed else 4 for sat in sim.leo.sats],
+                    symbol=["diamond" if sat.sid in exposed else "circle" for sat in sim.leo.sats],
+                    color=["#ffb450" if sat.sid in exposed else "#52a8ff" if sat.sid in visible
+                           else "#8798a9" for sat in sim.leo.sats],
+                ),
                 name="Спутники",
             ),
             go.Scatter3d(
@@ -135,7 +141,7 @@ def animate_with_metrics(
                 y=links[1],
                 z=links[2],
                 mode="lines",
-                line=dict(color="#ff876d", width=3),
+                line=dict(color="#52a8ff", width=3),
                 name="В зоне станции",
             ),
             go.Scatter(
@@ -192,6 +198,9 @@ def animate_with_metrics(
     for i, layer in enumerate(frames[0].data):
         fig.add_trace(layer, row=1, col=2 if i == 2 else 1)
     fig.frames = frames
+    fig.add_trace(go.Scatter3d(x=[None], y=[None], z=[None], mode="markers",
+                              marker=dict(color="#ffb450", symbol="diamond", size=8),
+                              name="Раскрыта доля"), row=1, col=1)
     fig.add_trace(
         go.Scatter(
             x=[0, t_total],
@@ -298,6 +307,6 @@ chart.on('plotly_buttonclicked', async ({button}) => {
     }
 });
 """
-    fig.write_html(out_html, include_plotlyjs="directory", auto_play=False, post_script=playback)
+    write_plotly_page(fig, out_html, "Орбиты и зона видимости", auto_play=False, post_script=playback)
     print(f"Сохранено: {out_html}", flush=True)
     return out_html, tracker

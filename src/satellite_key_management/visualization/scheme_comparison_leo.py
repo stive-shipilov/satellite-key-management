@@ -21,6 +21,8 @@ from satellite_key_management.crypto.schemes import SCHEMES
 from satellite_key_management.simulation.leo_model import LEOModel, R_EARTH
 from satellite_key_management.simulation.session import SessionSimulator
 
+from .report import write_plotly_page
+
 SCHEME_COLORS = {
     "shamir":       "#2b7bba",
     "blakley":      "#d1712f",
@@ -204,7 +206,7 @@ def build_scheme_comparison_leo(
                      f"{'✅ ключ собран' if ok else '❌ кворум не набран'}<br>"
                      f"доля {size} · recover {rec}")
             scheme_layers.append(go.Scatter(
-                x=[0.5], y=[len(SCHEMES) - idx - 0.5],
+                x=[0.12], y=[len(SCHEMES) - idx - 0.5],
                 mode="markers+text",
                 marker=dict(size=40, color=SCHEME_COLORS[scheme],
                             line=dict(color="white" if ok else "gray", width=2)),
@@ -227,8 +229,7 @@ def build_scheme_comparison_leo(
         frames.append(go.Frame(
             name=str(t),
             data=[sat_layer, gs_victim_layer, gs_attacker_layer, *scheme_layers],
-            # traces: 0 = спутники, 1 = victim, 2 = attacker, 3..7 = схемы
-            traces=[0, 1, 2, *range(3, 3 + len(SCHEMES))],
+            traces=list(range(3 + len(scheme_layers))),
             layout=go.Layout(title_text=title_str),
         ))
 
@@ -243,16 +244,9 @@ def build_scheme_comparison_leo(
             "Схемы разделения секрета на видимости жертвы",
         ],
     )
-    # Заглушки под слои, которые обновляются фреймами.
-    fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode="markers", name="Спутники"),
-                  row=1, col=1)
-    fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode="markers", name="GS-жертва"),
-                  row=1, col=1)
-    fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode="markers", name="GS-атакующий"),
-                  row=1, col=1)
-    for _ in SCHEMES:
-        fig.add_trace(go.Scatter(x=[], y=[], mode="markers+text",
-                                 showlegend=False), row=1, col=2)
+    if frames:
+        for index, layer in enumerate(frames[0].data):
+            fig.add_trace(layer, row=1, col=1 if index < 3 else 2)
 
     fig.frames = frames
     fig.update_layout(
@@ -278,6 +272,6 @@ def build_scheme_comparison_leo(
         height=650,
         legend=dict(orientation="h", y=-0.05),
     )
-    fig.write_html(out_html, include_plotlyjs="directory")
+    write_plotly_page(fig, out_html, "Сравнение пяти схем", auto_play=False)
     print(f"Сохранено: {out_html}", flush=True)
     return out_html

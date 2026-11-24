@@ -3,6 +3,8 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from .report import write_plotly_page
+
 
 def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
                             t_total=300, step=3, radius_km=2500,
@@ -81,6 +83,6 @@ def build_metrics_dashboard(sim, gs_lat=-30.0, gs_lon=-60.0,
         showlegend=False, height=800,
     )
     fig.update_xaxes(color="white"); fig.update_yaxes(color="white")
-    fig.write_html(out_html, include_plotlyjs="directory")
+    write_plotly_page(fig, out_html, "Метрики видимости и раскрытия долей")
     print(f"Сохранено: {out_html}")
     return out_html, tracker

@@ -20,10 +20,10 @@ from satellite_key_management.simulation.contact_session import (
     session_history,
 )
 from satellite_key_management.simulation.leo_model import LEOModel
-from satellite_key_management.simulation.orbital_experiment import compare_orbital_sessions
+from satellite_key_management.simulation.orbital_experiment import simulate_orbital_sessions
 from satellite_key_management.simulation.session import SessionSimulator
 from satellite_key_management.visualization.animation_plotly import animate_with_metrics
-from satellite_key_management.visualization.metrics_dashboard import build_metrics_dashboard
+from satellite_key_management.visualization.attack_dashboard import save_attack_dashboard
 from satellite_key_management.visualization.report import save_index
 from satellite_key_management.visualization.scheme_comparison_leo import build_scheme_comparison_leo, \
     compare_schemes_on_leo
@@ -55,7 +55,8 @@ def run(out: Path, minutes: int, step: int, threat: float = 0.3):
     save_contact_history(history, out)
 
     # -------- 3. Кворум, защищённая доставка и раскрытие долей ------------
-    orbital_results, tracker = compare_orbital_sessions(leo, minutes, k=sim.k, threat=threat)
+    trials, tracker = simulate_orbital_sessions(leo, minutes, k=sim.k, threat=threat)
+    orbital_results = [trial.result for trial in trials]
     pd.DataFrame([asdict(row) for row in orbital_results]).convert_dtypes().to_csv(
         out / "orbital_experiment.csv", index=False
     )
@@ -69,10 +70,7 @@ def run(out: Path, minutes: int, step: int, threat: float = 0.3):
         out_html=str(out / "simulation_3d.html"),
         gs_lat=55.0, gs_lon=37.0, tracker=tracker,
     )
-    build_metrics_dashboard(
-        sim, t_total=minutes, step=step, tracker=tracker,
-        out_html=str(out / "metrics_dashboard.html"),
-    )
+    save_attack_dashboard(trials, history, out / "metrics_dashboard.html")
     leo_vis = LEOModel(n_sats=72, seed=7, n_planes=12)
     build_scheme_comparison_leo(
         leo_vis,

@@ -55,6 +55,7 @@ class ExposureSample:
     epoch: int
     quorum_reached: bool
     key_exposed: bool
+    new_exposures: tuple[int, ...] = ()
 
 
 class AttackerTracker:
@@ -76,14 +77,16 @@ class AttackerTracker:
         self._session_id, self._epoch = session_id, epoch
 
         current = self.observations.setdefault((session_id, epoch), set())
+        new_exposures = ()
         if self.sim.shares is not None:
-            current.update(sid for sid in exposed if 1 <= sid <= self.sim.n)
+            new_exposures = tuple(sorted({sid for sid in exposed if 1 <= sid <= self.sim.n} - current))
+            current.update(new_exposures)
         quorum = len(current) >= self.sim.k
         if quorum:
             self.exposed_keys.add(session_id)
         sample = ExposureSample(
             minute, tuple(sorted(set(visible))), len(current), self.sim.k,
-            epoch, quorum, session_id in self.exposed_keys,
+            epoch, quorum, session_id in self.exposed_keys, new_exposures,
         )
         self.history.append(sample)
         return sample
