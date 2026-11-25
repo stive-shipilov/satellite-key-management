@@ -24,7 +24,9 @@ from satellite_key_management.simulation.orbital_experiment import simulate_orbi
 from satellite_key_management.simulation.session import SessionSimulator
 from satellite_key_management.visualization.animation_plotly import animate_with_metrics
 from satellite_key_management.visualization.attack_dashboard import save_attack_dashboard
-from satellite_key_management.visualization.orbit_view import DEFAULT_OBSERVER
+from satellite_key_management.visualization.orbit_view import (
+    DEFAULT_OBSERVER, DEMO_GROUPS, orbit_config, save_contact_risk_page,
+)
 from satellite_key_management.visualization.report import save_index
 from satellite_key_management.visualization.scheme_comparison_leo import build_scheme_comparison_leo, \
     compare_schemes_on_leo
@@ -71,8 +73,10 @@ def run(out: Path, minutes: int, step: int, threat: float = 0.3):
     animate_with_metrics(
         sim, t_total=minutes, step=step,
         out_html=str(out / "simulation_3d.html"),
-        gs_lat=55.0, gs_lon=37.0, tracker=tracker, scenario_leo=demo_leo,
+        gs_lat=55.0, gs_lon=37.0, tracker=tracker, scenario_leo=demo_leo, orbit_groups=DEMO_GROUPS,
     )
+    contact_demo = orbit_config(demo_leo, 120, 1, 55.0, 37.0, sim.k, 30, groups=DEMO_GROUPS)
+    save_contact_risk_page(out / "contact_risk.html", contact_demo, DEFAULT_OBSERVER)
     save_attack_dashboard(trials, history, out / "metrics_dashboard.html")
     build_scheme_comparison_leo(
         demo_leo,
@@ -83,6 +87,7 @@ def run(out: Path, minutes: int, step: int, threat: float = 0.3):
         n=len(demo_leo.sats),
         k_shamir=sim.k,
         out_html=str(out / "schemes_on_leo_live.html"),
+        orbit_groups=DEMO_GROUPS,
     )
     plot_attacker_accumulation(tracker, out / "attacker_accumulation.png")
 

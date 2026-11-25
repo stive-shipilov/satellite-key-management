@@ -17,30 +17,36 @@ const OrbitScenario = (() => {
         ];
     }
 
-    function visibleIds(positions, ground, mask) {
+    function visibleIds(positions, ground, mask, ids = null) {
         const minSine = Math.sin(mask * radians);
         const [gx, gy, gz] = ground;
         const visible = [];
         positions.forEach(([x, y, z], i) => {
             const dx = x - gx, dy = y - gy, dz = z - gz;
             const sine = (dx * gx + dy * gy + dz * gz) / (radius * Math.hypot(dx, dy, dz));
-            if (sine + 1e-12 >= minSine) visible.push(i + 1);
+            if (sine + 1e-12 >= minSine) visible.push(ids ? ids[i] : i + 1);
         });
         return visible;
     }
 
-    function createGeometry(config, observer = null) {
-        const {n, planes, altitude, inclination, lat, lon, mask, minutes} = config;
+    function groupsFor(config) {
+        return config.groups ?? [{n: config.n, planes: config.planes,
+            altitude: config.altitude, inclination: config.inclination}];
+    }
+
+    function satelliteIds(groups) {
+        return groups.flatMap(({n}, group) =>
+            Array.from({length: n}, (_, i) => group * 1000 + i + 1));
+    }
+
+    function createShell({n, planes, altitude, inclination}, group) {
         const orbitRadius = radius + altitude;
         const omega = Math.sqrt(earthGM / orbitRadius ** 3) * 60;
-        const station = groundPoint(lat, lon);
-        const second = observer ? groundPoint(observer.lat, observer.lon) : null;
         const cosInc = Math.cos(inclination * radians), sinInc = Math.sin(inclination * radians);
-        const stations = second ? [station, second] : [station];
         const planeData = Array.from({length: planes}, (_, plane) => {
             const count = Math.floor(n / planes) + Number(plane < n % planes);
             return {
-                raan: twoPi * plane / planes,
+                raan: twoPi * (plane + group / 3) / planes,
                 phases: Array.from({length: count}, (_, i) => twoPi * (i / count + plane / n)),
             };
         });
@@ -63,28 +69,56 @@ const OrbitScenario = (() => {
             });
         }
 
-        // Keep the drawing readable for dense constellations. Every plane is used for contacts.
-        const drawnPlanes = Math.min(24, planes);
+        // Cap the drawn paths. Every plane still contributes to the contact trace.
+        const drawnPlanes = Math.min(12, planes);
         const paths = Array.from({length: drawnPlanes}, (_, i) => {
             const {raan} = planeData[Math.floor(i * planes / drawnPlanes)];
-            return Array.from({length: 97}, (_, j) => point(twoPi * j / 96, Math.cos(raan), Math.sin(raan)));
+            const cos = Math.cos(raan), sin = Math.sin(raan);
+            return Array.from({length: 97}, (_, j) => point(twoPi * j / 96, cos, sin));
         });
+        return {paths, positionsAt, period: twoPi / omega};
+    }
 
+    function createGeometry(config, observer = null) {
+        const {lat, lon, mask, minutes} = config;
+        const groups = groupsFor(config);
+        const shells = groups.map(createShell);
+        const ids = satelliteIds(groups);
+        const station = groundPoint(lat, lon);
+        const second = observer ? groundPoint(observer.lat, observer.lon) : null;
+        const stations = second ? [station, second] : [station];
+        const positionsAt = t => shells.flatMap(shell => shell.positionsAt(t));
         const contacts = Array.from({length: minutes}, (_, t) => {
             const positions = positionsAt(t);
             return {
-                visible: visibleIds(positions, station, mask),
-                observed: second ? visibleIds(positions, second, mask) : [],
+                visible: visibleIds(positions, station, mask, ids),
+                observed: second ? visibleIds(positions, second, mask, ids) : [],
             };
         });
-        return {stations, paths, positionsAt, period: twoPi / omega, contacts};
+        return {stations, shells, ids, positionsAt, contacts};
+    }
+
+    function sessionTransitions({refresh, rotation = 0}, minutes, manualRotations = new Set()) {
+        let lastRotation = 0, lastDistribution = 0;
+        return Array.from({length: minutes}, (_, minute) => {
+            if (manualRotations.has(minute) || (rotation > 0 && minute - lastRotation >= rotation)) {
+                lastRotation = lastDistribution = minute;
+                return "rotate";
+            }
+            if (refresh > 0 && minute - lastDistribution >= refresh) {
+                lastDistribution = minute;
+                return "refresh";
+            }
+            return null;
+        });
     }
 
     function run(config, contacts, events) {
-        const {k, n, refresh} = config;
+        const {k} = config;
+        const ids = new Set(satelliteIds(groupsFor(config)));
         const byMinute = new Map();
         for (const event of events) {
-            if (event.minute < 0 || event.minute >= contacts.length || event.sid > n) continue;
+            if (event.minute < 0 || event.minute >= contacts.length || (event.sid != null && !ids.has(event.sid))) continue;
             if (!byMinute.has(event.minute)) byMinute.set(event.minute, []);
             byMinute.get(event.minute).push(event);
         }
@@ -93,7 +127,9 @@ const OrbitScenario = (() => {
         const known = new Set();
         let epoch = 1, session = 1, exposedKey = false;
         let first = null, outage = 0, longest = 0, available = 0, exposedMinutes = 0;
-        let lastDistribution = 0;
+        const manualRotations = new Set([...byMinute].filter(([, items]) => items.some(event => event.kind === "rotate"))
+            .map(([minute]) => minute));
+        const transitions = sessionTransitions(config, contacts.length, manualRotations);
         const history = contacts.map(({visible, observed}, minute) => {
             const now = byMinute.get(minute) ?? [];
             // Isolation/recovery applies before this minute's distribution and disclosures.
@@ -106,11 +142,10 @@ const OrbitScenario = (() => {
                     persistent.delete(sid);
                 }
             }
-            const rotated = now.some(event => event.kind === "rotate");
-            const refreshed = refresh > 0 && minute - lastDistribution >= refresh;
+            const rotated = transitions[minute] === "rotate";
+            const refreshed = transitions[minute] === "refresh";
             if (rotated || refreshed) {
                 known.clear();
-                lastDistribution = minute;
                 if (rotated) {
                     session++;
                     exposedKey = false;
@@ -152,21 +187,74 @@ const OrbitScenario = (() => {
             return {
                 visible, observed, received, ready,
                 isolated: [...isolated], exposed: [...known], disclosed,
-                exposedKey, newlyExposed, disclosedKey, epoch, session, rotated, refreshed: refreshed && !rotated,
+                exposedKey, newlyExposed, disclosedKey, epoch, session, rotated, refreshed,
             };
         });
         return {history, summary: {first, longest, available, exposedMinutes}};
     }
 
     function example(config, outcome) {
-        const last = Math.min(config.minutes, config.refresh || config.minutes) - 1;
+        const last = Math.min(config.minutes, config.refresh || config.minutes, config.rotation || config.minutes) - 1;
         const count = outcome === "quorum" ? config.k : config.k - 1;
-        return Array.from({length: count}, (_, i) => ({
-            kind: "reveal", sid: i + 1, minute: Math.floor(last * (i + 1) / Math.max(1, config.k)),
+        return satelliteIds(groupsFor(config)).slice(0, count).map((sid, i) => ({
+            kind: "reveal", sid, minute: Math.floor(last * (i + 1) / config.k),
         }));
     }
 
-    return {radius, earthRotation, groundPoint, visibleIds, createGeometry, run, example};
+    function windowDraw(seed, sid, start) {
+        // A stable draw for this virtual window, even when playback or the duration setting changes.
+        let value = seed ^ Math.imul(sid, 0x9e3779b1) ^ Math.imul(start + 1, 0x85ebca77);
+        value = Math.imul(value ^ (value >>> 16), 0x21f0aaad);
+        value = Math.imul(value ^ (value >>> 15), 0x735a2d97);
+        return ((value ^ (value >>> 15)) >>> 0) / 0x100000000;
+    }
+
+    function contactRisk(config, contacts, profile) {
+        const {duration, probability, seed} = profile;
+        const windows = new Map();
+        const known = new Set();
+        const events = [], log = [];
+        const transitions = sessionTransitions(config, contacts.length);
+        const record = (minute, sid, window, status) =>
+            log.push({minute, sid, elapsed: window.elapsed, status});
+        const progress = contacts.map(({observed}, minute) => {
+            if (transitions[minute]) {
+                const status = transitions[minute] === "rotate" ? "rotated" : "refreshed";
+                for (const [sid, window] of windows) {
+                    if (window.status === "waiting") record(minute, sid, window, status);
+                }
+                windows.clear();
+                known.clear();
+            }
+            const visible = new Set(observed);
+            for (const [sid, window] of windows) {
+                if (visible.has(sid)) continue;
+                if (window.status === "waiting") record(minute, sid, window, "interrupted");
+                windows.delete(sid);
+            }
+            return observed.map(sid => {
+                let window = windows.get(sid);
+                if (!window) {
+                    window = {start: minute, elapsed: 0, status: known.has(sid) ? "known" : "waiting"};
+                    windows.set(sid, window);
+                }
+                window.elapsed = minute - window.start;
+                if (window.status === "waiting" && window.elapsed >= duration) {
+                    const revealed = windowDraw(seed, sid, window.start) < probability;
+                    window.status = revealed ? "revealed" : "failed";
+                    record(minute, sid, window, window.status);
+                    if (revealed) {
+                        known.add(sid);
+                        events.push({minute, sid, kind: "reveal"});
+                    }
+                }
+                return {sid, elapsed: window.elapsed, status: window.status};
+            });
+        });
+        return {events, log, progress};
+    }
+
+    return {radius, earthRotation, groundPoint, visibleIds, groupsFor, createGeometry, run, example, contactRisk};
 })();
 
 if (typeof module !== "undefined") module.exports = OrbitScenario;

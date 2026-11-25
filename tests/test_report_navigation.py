@@ -19,7 +19,8 @@ class PageLinks(HTMLParser):
 
 def test_index_links_all_available_report_outputs(tmp_path):
     outputs = {
-        "metrics_dashboard.html", "simulation_3d.html", "contacts.html", "schemes_on_leo_live.html",
+        "metrics_dashboard.html", "simulation_3d.html", "contact_risk.html",
+        "contacts.html", "schemes_on_leo_live.html",
         "attacker_accumulation.png", "compromise_step.png", "refresh.png", "dynamic_k.png",
         "schemes_on_leo.png", "radar.png", "contacts.csv", "orbital_experiment.csv",
         "schemes_on_leo.csv", "benchmark.csv",

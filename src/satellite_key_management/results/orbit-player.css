@@ -134,3 +134,33 @@
     .scenario-fields.event-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .event-fields label:first-child { grid-column: 1 / -1; }
 }
+
+#orbit-groups { margin-top: .7rem; }
+.orbit-group { border: 1px solid var(--line); border-radius: .6rem; min-inline-size: 0; margin: .45rem 0; padding: .35rem .65rem .65rem; }
+.orbit-group legend { color: var(--orbit-accent); font-size: .87rem; font-weight: 650; padding-inline: .3rem; }
+.group-period { grid-column: 1 / -1; color: var(--muted); font-size: .78rem; }
+
+.contact-progress { margin-top: .8rem; padding-top: .5rem; border-top: 1px solid var(--line); }
+.contact-progress h3 { font-size: .92rem; margin: 0 0 .4rem; }
+.contact-progress ul { margin: 0; padding: 0; list-style: none; height: 8rem; overflow-y: auto;
+    scrollbar-gutter: stable; overscroll-behavior: contain; overflow-anchor: none; }
+.contact-progress li { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .55rem;
+    padding: .25rem 0; font-size: .82rem; color: var(--muted); }
+.contact-progress progress { flex: 1; min-width: 2.7rem; height: .48rem; accent-color: #c5a5ff; }
+.contact-progress small { font-variant-numeric: tabular-nums; }
+.contact-disclosed { color: #ffcf98; }
+#contact-form { margin-top: .75rem; }
+
+.orbit-contact #exposure-now { block-size: 2lh; overflow: hidden; display: -webkit-box;
+    -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.orbit-contact #key-status { display: flex; align-items: center; min-block-size: 3.6em; }
+
+@media (width > 52rem) {
+    /* The globe sets the grid row height. The detail panel scrolls inside that row. */
+    .orbit-contact .orbit-detail { align-self: stretch; contain: size; display: flex; flex-direction: column; }
+    .orbit-contact #orbit-metrics { display: flex; flex-direction: column; min-height: 0;
+        overflow-y: auto; scrollbar-gutter: stable; }
+    .orbit-contact #orbit-metrics > * { flex: none; }
+    .orbit-contact #orbit-metrics > .contact-progress { flex: 1 0 7rem; display: flex; flex-direction: column; }
+    .orbit-contact .contact-progress ul { flex: 1; height: 0; min-height: 0; }
+}

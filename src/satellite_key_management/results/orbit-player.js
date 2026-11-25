@@ -9,11 +9,15 @@
         byId("orbit-error").hidden = false;
         return;
     }
-    const isVisibility = data.mode === "visibility";
+    const isContact = data.mode === "contact";
+    const isVisibility = data.mode !== "schemes";
+    let contactProfile = data.contact_presets?.short;
+    let contactRun;
     const radius = OrbitScenario.radius;
     let config = data.config;
     let observer = data.observer;
     let geometry = OrbitScenario.createGeometry(config, observer);
+    const comparisonMembers = new Set(isVisibility ? [] : geometry.ids.slice(0, data.members));
     let events = [];
     let history, summary, chartMax, lastMinute;
     let visible, observed, exposures, isolated;
@@ -21,6 +25,7 @@
         quiet: "#758ca6", visible: "#6fdbff", observed: "#c5a5ff",
         both: "#8bf2c8", exposure: "#ffbe78", isolated: "#ef90a0", station: "#fff2da", observer: "#c5a5ff",
     };
+    const groupColors = ["#82b4ee", "#7adfc0", "#edb4e6"];
     const viewNames = {
         quiet: "Вне зоны", visible: "Станция связи", observed: "Зона наблюдения",
         both: "Обе зоны", exposure: "Доля раскрыта", isolated: "Изолирован",
@@ -169,22 +174,24 @@
         const angle = -OrbitScenario.earthRotation * time;
         const cos = Math.cos(angle), sin = Math.sin(angle);
         ctx.lineWidth = 1;
-        ctx.strokeStyle = "#accfff43";
-        ctx.beginPath();
-        for (const path of geometry.paths) {
-            let drawing = false;
-            for (const [x, y, z] of path) {
-                const point = rotate(x * cos - y * sin, x * sin + y * cos, z);
-                if (!onScreen(point)) {
-                    drawing = false;
-                    continue;
+        geometry.shells.forEach(({paths}, index) => {
+            ctx.strokeStyle = groupColors[index] + "68";
+            ctx.beginPath();
+            for (const path of paths) {
+                let drawing = false;
+                for (const [x, y, z] of path) {
+                    const point = rotate(x * cos - y * sin, x * sin + y * cos, z);
+                    if (!onScreen(point)) {
+                        drawing = false;
+                        continue;
+                    }
+                    if (drawing) ctx.lineTo(...project(point));
+                    else ctx.moveTo(...project(point));
+                    drawing = true;
                 }
-                if (drawing) ctx.lineTo(...project(point));
-                else ctx.moveTo(...project(point));
-                drawing = true;
             }
-        }
-        ctx.stroke();
+            ctx.stroke();
+        });
     }
 
     function paintLinks(origin, links, sourceColor, exposedColor) {
@@ -229,7 +236,7 @@
         const positions = geometry.positionsAt(time);
         dots = [];
         for (let i = 0; i < positions.length; i++) {
-            const sid = i + 1;
+            const sid = geometry.ids[i];
             const point = rotate(...positions[i]);
             if (!onScreen(point)) continue;
             const screen = project(point);
@@ -314,14 +321,16 @@
                 plot.fillStyle = "#ffbe7821";
                 plot.fillRect(x(t), y(chartMax), x(t + 1) - x(t), y(0) - y(chartMax));
             }
-            plot.strokeStyle = "#7590ab6c";
-            plot.beginPath();
-            for (const [t, row] of history.entries()) {
-                if (!row.rotated && !row.refreshed) continue;
-                plot.moveTo(x(t), y(chartMax));
-                plot.lineTo(x(t), y(0));
+            for (const [event, marker] of [["refreshed", "#7590ab6c"], ["rotated", "#c5a5ff"]]) {
+                plot.strokeStyle = marker;
+                plot.beginPath();
+                for (const [t, row] of history.entries()) {
+                    if (!row[event]) continue;
+                    plot.moveTo(x(t), y(chartMax));
+                    plot.lineTo(x(t), y(0));
+                }
+                plot.stroke();
             }
-            plot.stroke();
             plot.strokeStyle = "#455d77";
             plot.beginPath();
             plot.moveTo(x(0), y(0));
@@ -387,11 +396,13 @@
                 row.disclosed.length ? `Новые раскрытия: № ${row.disclosed.join(", ")}` : "",
                 row.disclosedKey ? "Раскрытие ключа целиком" : "",
             ].filter(Boolean).join(" · ");
-            now.hidden = !now.textContent;
+            now.hidden = !isContact && !now.textContent;
+            if (isContact) now.title = now.textContent;
             drawTracks(minute);
+            if (isContact) showContactProgress(minute);
         } else {
             byId("visible-count").textContent = visible.size;
-            const count = row.visible.filter(sid => sid <= data.members).length;
+            const count = row.visible.filter(sid => comparisonMembers.has(sid)).length;
             for (const [i, scheme] of data.schemes.entries()) {
                 const success = count >= scheme.threshold;
                 const state = byId(`state-${i}`);
@@ -434,14 +445,15 @@
 
     const legendMark = (group, label, diamond = false) =>
         `<span><i class="${diamond ? "diamond" : ""}" style="--mark:${color[group]}"></i>${label}</span>`;
+    const linkMark = (mark, label, dashed = false) =>
+        `<span><i class="line-mark${dashed ? " dashed" : ""}" style="--mark:${mark}"></i>${label}</span>`;
+
     function updateObserverLabels() {
         const marks = [legendMark("visible", "Видны станции")];
         if (observer) marks.push(legendMark("observed", "Видны наблюдателю"), legendMark("both", "Видны обеим точкам"));
         if (isVisibility) marks.push(legendMark("exposure", "Доля раскрыта", true), legendMark("isolated", "Изолирован", true));
         marks.push(legendMark("quiet", "Вне зоны"));
         byId("orbit-legend").innerHTML = marks.join("");
-        const linkMark = (mark, label, dashed = false) =>
-            `<span><i class="line-mark${dashed ? " dashed" : ""}" style="--mark:${mark}"></i>${label}</span>`;
         const links = [linkMark(color.visible, "Связь со станцией")];
         if (observer) links.push(linkMark(color.observed, "Радиовидимость наблюдателя"));
         if (isVisibility) links.push(linkMark(color.exposure, "Доля спутника раскрыта", true));
@@ -465,10 +477,11 @@
           <div class="orbit-state-pair"><p id="station-status" class="orbit-status"></p>
           <p id="key-status" class="orbit-status"></p></div>
           <p id="exposure-now" class="orbit-note" hidden></p>
-          <dl class="orbit-summary" id="scenario-summary"></dl>`;
+          <dl class="orbit-summary" id="scenario-summary"></dl>
+          ${isContact ? '<section class="contact-progress"><h3 id="contact-progress-heading">Контакты наблюдателя</h3><ul id="contact-progress" tabindex="0" aria-labelledby="contact-progress-heading"></ul></section>' : ''}`;
         const tracks = document.createElement("figure");
         tracks.className = "orbit-tracks";
-        tracks.innerHTML = `<figcaption>Пунктир — порог. Вертикали — смена долей или ключа. Оранжевый фон — ключ раскрыт.</figcaption>
+        tracks.innerHTML = `<figcaption>Пунктир — порог. Серые вертикали — обновление долей, сиреневые — смена ключа. Оранжевый фон — ключ раскрыт.</figcaption>
           <canvas id="shares-chart" role="img" aria-label="Доли у станции и нарушителя по минутам"></canvas>`;
         document.querySelector(".orbit-timeline").append(tracks);
     } else {
@@ -492,7 +505,11 @@
     }
 
     function recompute() {
-        ({history, summary} = OrbitScenario.run(config, geometry.contacts, events));
+        if (isContact) {
+            contactRun = OrbitScenario.contactRisk(config, geometry.contacts, contactProfile);
+            renderContactLog();
+        }
+        ({history, summary} = OrbitScenario.run(config, geometry.contacts, isContact ? contactRun.events : events));
         lastMinute = history.length - 1;
         chartMax = history.reduce((max, row) => Math.max(max, row.received.length, row.exposed.length), config.k);
         shownMinute = -1;
@@ -500,11 +517,16 @@
         seek.max = lastMinute;
         seek.disabled = playButton.disabled = lastMinute === 0;
         byId("orbit-duration").textContent = `${lastMinute} мин`;
-        const drawn = geometry.paths.length < config.planes ? ` · показано ${geometry.paths.length}` : "";
-        byId("constellation").textContent = `${config.n} спутн. · ${config.planes} плоск. · ${number.format(config.altitude)} км${drawn}`;
+        const groups = OrbitScenario.groupsFor(config);
+        const totalPlanes = groups.reduce((count, group) => count + group.planes, 0);
+        const drawnPlanes = geometry.shells.reduce((count, shell) => count + shell.paths.length, 0);
+        const drawn = drawnPlanes < totalPlanes ? ` · показано плоскостей ${drawnPlanes}` : "";
+        byId("constellation").textContent = `${geometry.ids.length} спутн. · ${totalPlanes} плоск. · ${groups.length} гр.${drawn}`;
+        byId("orbit-group-legend").innerHTML = groups.map(({inclination, altitude, n}, i) =>
+            linkMark(groupColors[i], `Группа ${i + 1}: ${n} спутн., ${number.format(inclination)}°, ${number.format(altitude)} км`)
+        ).join("");
         updateObserverLabels();
         if (isVisibility) {
-            byId("orbital-period").textContent = `Расчётный период витка ${number.format(geometry.period)} мин.`;
             const availablePercent = number.format(100 * summary.available / history.length);
             byId("scenario-summary").innerHTML = `<div><dt>Окна с кворумом</dt>
               <dd>${availablePercent}% · ${summary.available} из ${history.length} мин</dd></div>
@@ -515,10 +537,77 @@
         seekTime(Math.min(Math.floor(time), lastMinute));
     }
 
-    function enableScenarioControls() {
+    function enableOrbitControls(onChange) {
         const configForm = byId("scenario-config");
-        const eventForm = byId("scenario-event");
         const field = name => configForm.elements.namedItem(name);
+        const groupCount = field("group-count");
+        const groupContainer = byId("orbit-groups");
+        const template = byId("orbit-group-template");
+        const groupEditors = data.group_presets.map((_, index) => {
+            const editor = template.content.firstElementChild.cloneNode(true);
+            const heading = editor.querySelector("legend");
+            heading.textContent = `Группа ${index + 1}`;
+            heading.style.setProperty("--orbit-accent", groupColors[index]);
+            groupContainer.append(editor);
+            return editor;
+        });
+
+        function readGroups() {
+            return groupEditors.slice(0, Number(groupCount.value)).map(editor =>
+                Object.fromEntries([...editor.querySelectorAll("[data-field]")].map(input =>
+                    [input.dataset.field, input.valueAsNumber])));
+        }
+
+        function updateBounds() {
+            const groups = readGroups();
+            for (const [i, editor] of groupEditors.entries()) {
+                editor.hidden = editor.disabled = i >= groups.length;
+                const count = groups[i]?.n;
+                editor.querySelector('[data-field="planes"]').max = Number.isFinite(count) ? count : "";
+            }
+            const total = groups.reduce((sum, group) => sum + (group.n || 0), 0);
+            field("k").max = total;
+            groupCount.setCustomValidity(total > 256 ? "Во всех группах суммарно может быть до 256 спутников." : "");
+        }
+
+        function showPeriods() {
+            geometry.shells.forEach(({period}, i) => {
+                groupEditors[i].querySelector(".group-period").textContent = `Период витка ${number.format(period)} мин`;
+            });
+        }
+
+        const fields = ["k", "refresh", "rotation", "lat", "lon", "mask", "minutes"];
+        function syncConfig() {
+            const groups = OrbitScenario.groupsFor(config);
+            groupCount.value = String(groups.length);
+            groupEditors.forEach((editor, i) => {
+                for (const [name, value] of Object.entries(groups[i] ?? data.group_presets[i])) {
+                    editor.querySelector(`[data-field="${name}"]`).value = value;
+                }
+            });
+            for (const name of fields) field(name).value = config[name];
+            updateBounds();
+            showPeriods();
+        }
+        field("minutes").max = Math.max(1440, config.minutes);
+        configForm.addEventListener("input", updateBounds);
+        configForm.addEventListener("submit", event => {
+            event.preventDefault();
+            const parameters = Object.fromEntries(fields.map(name => [name, field(name).valueAsNumber]));
+            config = {...parameters, groups: readGroups()};
+            geometry = OrbitScenario.createGeometry(config, observer);
+            resetCamera();
+            recompute();
+            onChange?.();
+            showPeriods();
+            byId("config-message").textContent = "Прогон пересчитан.";
+        });
+        syncConfig();
+        return syncConfig;
+    }
+
+    function enableManualEvents() {
+        const eventForm = byId("scenario-event");
         const eventField = name => eventForm.elements.namedItem(name);
         const log = byId("event-log");
         const kind = eventField("kind");
@@ -528,12 +617,24 @@
         let edited = null;
         const labels = Object.fromEntries([...kind.options].map(option => [option.value, option.text]));
         const needsNode = type => type !== "rotate" && type !== "key";
-        const active = event => event.minute <= lastMinute && (!event.sid || event.sid <= config.n);
+        const active = event => event.minute <= lastMinute && (!event.sid || geometry.ids.includes(event.sid));
 
-        function updateBounds() {
-            field("planes").max = field("k").max = field("n").value;
-            eventMinute.max = lastMinute;
-            sid.max = config.n;
+        function updateSatelliteOptions() {
+            const previous = sid.value;
+            sid.replaceChildren();
+            const placeholder = new Option("Выберите спутник", "");
+            placeholder.disabled = true;
+            sid.add(placeholder);
+            const groups = OrbitScenario.groupsFor(config);
+            let next = 0;
+            for (const [i, group] of groups.entries()) {
+                const options = document.createElement("optgroup");
+                options.label = `Группа ${i + 1}`;
+                for (const id of geometry.ids.slice(next, next + group.n)) options.append(new Option(`№ ${id}`, id));
+                sid.append(options);
+                next += group.n;
+            }
+            sid.value = geometry.ids.includes(Number(previous)) ? previous : String(geometry.ids[0]);
         }
 
         function updateEventKind() {
@@ -576,7 +677,7 @@
                     edited = event;
                     kind.value = event.kind;
                     eventMinute.value = event.minute;
-                    sid.value = event.sid ?? 1;
+                    sid.value = geometry.ids.includes(event.sid) ? String(event.sid) : "";
                     updateEventKind();
                     byId("save-event").textContent = "Сохранить событие";
                     byId("cancel-event").hidden = false;
@@ -595,25 +696,10 @@
 
         function refreshLog() {
             recompute();
-            updateBounds();
             renderLog();
         }
 
-        for (const [name, value] of Object.entries(config)) field(name).value = value;
-        field("n").max = Math.max(256, config.n);
-        field("minutes").max = Math.max(1440, config.minutes);
-        field("n").addEventListener("input", updateBounds);
-        configForm.addEventListener("submit", event => {
-            event.preventDefault();
-            config = Object.fromEntries([...new FormData(configForm)].map(([name, value]) => [name, Number(value)]));
-            geometry = OrbitScenario.createGeometry(config, observer);
-            resetCamera();
-            refreshLog();
-            byId("config-message").textContent = "Прогон пересчитан.";
-        });
-
         eventMinute.value = 0;
-        sid.value = 1;
         kind.addEventListener("change", updateEventKind);
         byId("event-now").addEventListener("click", () => { eventMinute.value = Math.floor(time); });
         byId("cancel-event").addEventListener("click", () => {
@@ -623,7 +709,7 @@
         eventForm.addEventListener("submit", event => {
             event.preventDefault();
             const entry = {minute: eventMinute.valueAsNumber, kind: kind.value};
-            if (needsNode(entry.kind)) entry.sid = sid.valueAsNumber;
+            if (needsNode(entry.kind)) entry.sid = Number(sid.value);
             if (events.some(item => item !== edited && item.minute === entry.minute &&
                 item.kind === entry.kind && item.sid === entry.sid)) {
                 eventMessage.textContent = "Такое событие уже есть.";
@@ -647,9 +733,110 @@
                 eventMessage.textContent = name === "empty" ? "События очищены." : "Пример загружен.";
             });
         }
-        updateBounds();
         updateEventKind();
-        renderLog();
+        function syncEvents() {
+            eventMinute.max = lastMinute;
+            updateSatelliteOptions();
+            renderLog();
+        }
+        syncEvents();
+        return syncEvents;
+    }
+
+    const contactLabels = {
+        waiting: "Идёт отсчёт", revealed: "Доля раскрыта", known: "Доля уже раскрыта",
+        failed: "Доля не раскрылась", interrupted: "Контакт прерван", refreshed: "Сменилась эпоха",
+        rotated: "Сменился ключ",
+    };
+
+    function showContactProgress(minute) {
+        const list = byId("contact-progress");
+        const scrollTop = list.scrollTop;
+        list.replaceChildren();
+        const rows = contactRun.progress[minute];
+        if (!rows.length) {
+            const li = document.createElement("li");
+            li.textContent = "Спутников в зоне наблюдения нет.";
+            list.append(li);
+        }
+        for (const {sid, elapsed, status} of rows) {
+            const li = document.createElement("li");
+            const label = document.createElement("span");
+            label.textContent = `№ ${sid} · ${contactLabels[status]}`;
+            if (status === "revealed" || status === "known") label.className = "contact-disclosed";
+            li.append(label);
+            if (status === "waiting") {
+                const progress = document.createElement("progress");
+                progress.max = contactProfile.duration;
+                progress.value = elapsed;
+                progress.setAttribute("aria-label", `№ ${sid}, ${elapsed} из ${contactProfile.duration} мин`);
+                const duration = document.createElement("small");
+                duration.textContent = `${elapsed} / ${contactProfile.duration} мин`;
+                li.append(progress, duration);
+            }
+            list.append(li);
+        }
+        list.scrollTop = scrollTop;
+    }
+
+    function renderContactLog() {
+        const log = byId("contact-log");
+        const entries = contactRun.log;
+        log.replaceChildren();
+        if (!entries.length) {
+            const empty = document.createElement("li");
+            empty.textContent = "За этот прогон нет завершённых проверок или прерванных контактов.";
+            log.append(empty);
+            return;
+        }
+        for (const {minute, sid, elapsed, status} of entries) {
+            const row = document.createElement("li");
+            const button = document.createElement("button");
+            button.type = "button";
+            button.textContent = `${minute} мин`;
+            button.addEventListener("click", () => seekTime(minute));
+            const caption = document.createElement("span");
+            caption.textContent = `№ ${sid} · ${contactLabels[status]} · контакт ${elapsed} мин`;
+            if (status === "revealed") caption.className = "contact-disclosed";
+            row.append(button, caption);
+            log.append(row);
+        }
+    }
+
+    function enableContactControls(syncConfig, syncObserver) {
+        const form = byId("contact-form");
+        const field = name => form.elements.namedItem(name);
+        const message = byId("contact-message");
+        function fillProfile() {
+            field("duration").value = contactProfile.duration;
+            field("probability").value = contactProfile.probability * 100;
+            field("seed").value = contactProfile.seed;
+        }
+        fillProfile();
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            contactProfile = {duration: field("duration").valueAsNumber, seed: field("seed").valueAsNumber,
+                probability: field("probability").valueAsNumber / 100};
+            recompute();
+            message.textContent = "Окна и исходы пересчитаны.";
+        });
+        for (const button of document.querySelectorAll("[data-contact-example]")) {
+            button.addEventListener("click", () => {
+                contactProfile = data.contact_presets[button.dataset.contactExample];
+                config = data.config;
+                observer = data.observer;
+                geometry = OrbitScenario.createGeometry(config, observer);
+                resetCamera();
+                recompute();
+                syncConfig();
+                syncObserver();
+                fillProfile();
+                const target = summary.first ?? lastMinute;
+                seekTime(target);
+                message.textContent = summary.first === null ? "Ключ остался защищён на всей трассе." :
+                    `Кворум раскрытых долей достигнут на ${summary.first}-й минуте.`;
+            });
+        }
     }
 
     function enableObserverControls() {
@@ -657,8 +844,13 @@
         const enabled = form.elements.namedItem("enabled");
         const lat = form.elements.namedItem("lat");
         const lon = form.elements.namedItem("lon");
-        lat.value = data.observer.lat;
-        lon.value = data.observer.lon;
+        function syncObserver() {
+            enabled.checked = Boolean(observer);
+            const point = observer ?? data.observer;
+            lat.value = point.lat;
+            lon.value = point.lon;
+        }
+        syncObserver();
         form.addEventListener("submit", event => {
             event.preventDefault();
             observer = enabled.checked ? {lat: lat.valueAsNumber, lon: lon.valueAsNumber} : null;
@@ -672,12 +864,17 @@
             canvas.scrollIntoView({block: "center"});
             canvas.focus({preventScroll: true});
         });
+        return syncObserver;
     }
 
-    if (isVisibility) events = OrbitScenario.example(config, "below");
+    if (data.mode === "visibility") events = OrbitScenario.example(config, "below");
     recompute();
-    if (isVisibility) enableScenarioControls();
-    enableObserverControls();
+    const syncObserver = enableObserverControls();
+    if (isVisibility) {
+        const syncEvents = isContact ? null : enableManualEvents();
+        const syncConfig = enableOrbitControls(syncEvents);
+        if (isContact) enableContactControls(syncConfig, syncObserver);
+    }
 
     playButton.addEventListener("click", () => {
         if (!playing && time >= lastMinute) time = 0;
@@ -712,7 +909,8 @@
             }
         }
         satelliteLabel.hidden = !hit;
-        if (hit) satelliteLabel.textContent = `Спутник № ${hit.sid} · ${viewNames[hit.group]}`;
+        if (hit) satelliteLabel.textContent =
+            `Спутник № ${hit.sid} · Группа ${Math.floor((hit.sid - 1) / 1000) + 1} · ${viewNames[hit.group]}`;
     });
     canvas.addEventListener("lostpointercapture", () => { drag = null; });
     canvas.addEventListener("pointerleave", () => { satelliteLabel.hidden = true; });

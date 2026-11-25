@@ -96,9 +96,11 @@ def build_scheme_comparison_leo(
     n: int = 12,
     k_shamir: int = 3,
     out_html: str = "schemes_on_leo_live.html",
+    *,
+    orbit_groups=None,
 ) -> str:
     """Сравнить доступность ключа для пяти схем на каждой минуте трассы."""
-    config = orbit_config(leo, minutes, step, gs_lat, gs_lon, k_shamir)
+    config = orbit_config(leo, minutes, step, gs_lat, gs_lon, k_shamir, groups=orbit_groups)
     sims = {}
     for name in SCHEMES:
         threshold = n if name in ("xor", "crt") else k_shamir

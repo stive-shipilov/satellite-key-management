@@ -16,11 +16,15 @@ def animate_with_metrics(
     *,
     tracker=None,
     scenario_leo=None,
+    orbit_groups=None,
 ):
     """Открыть новый сценарий; параметры конуса оставлены для прежних вызовов."""
     from satellite_key_management.attacks.attacks import track_visibility
 
-    config = orbit_config(scenario_leo if scenario_leo is not None else sim.leo, t_total, step, gs_lat, gs_lon, sim.k, refresh_every)
+    config = orbit_config(
+        scenario_leo if scenario_leo is not None else sim.leo,
+        t_total, step, gs_lat, gs_lon, sim.k, refresh_every, groups=orbit_groups,
+    )
     if tracker is None:
         tracker = track_visibility(sim, t_total, gs_lat, gs_lon, refresh_every=refresh_every or None)
 
