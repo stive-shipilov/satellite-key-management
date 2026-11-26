@@ -1,99 +1,205 @@
-"""Стартовая страница локального отчёта, все ссылки относительны."""
+"""Страницы локального отчёта и общие ресурсы для визуализаций."""
+
+from html import escape
+from pathlib import Path
+from shutil import copyfile
 
 
-def save_index(out, history, *, comparison_rows=None, bench_sample=None, tracker=None):
+INTERACTIVE_VIEWS = (
+    ("metrics_dashboard.html", "Исходы атак", "Сравните раскрытые доли, доставку и состояние ключа в двух сценариях."),
+    ("simulation_3d.html", "Орбиты и зона видимости", "Настройте созвездие и порог. Сравните кворум станции с раскрытиями долей."),
+    ("contact_risk.html", "Риск раскрытия при радиоконтакте", "Меняйте длительность контакта и вероятность раскрытия доли."),
+    ("contacts.html", "Связь наземной станции", "Посмотрите кворум, смену обслуживающего спутника и результат проверки подписи."),
+    ("schemes_on_leo_live.html", "Сравнение пяти схем", "Сопоставьте доступность кворума на общей орбитальной трассе."),
+)
+
+STATIC_VIEWS = (
+    ("attacker_accumulation.png", "Накопление долей", "Раскрытые доли текущей эпохи и порог."),
+    ("compromise_step.png", "Граница восстановления", "Зависимость восстановления ключа от числа подлинных долей."),
+    ("refresh.png", "Обновление долей", "Смена эпох в учебной модели накопления."),
+    ("dynamic_k.png", "Адаптивный порог", "Выбор порога по видимости и заданному уровню угрозы."),
+    ("schemes_on_leo.png", "Характеристики пяти схем", "Размер долей и время вычислений."),
+    ("radar.png", "Сводка бенчмарка", "Сравнение времени и размеров в одном сценарии."),
+)
+
+DATA_FILES = (
+    ("contacts.csv", "Журнал контактов"),
+    ("orbital_experiment.csv", "Орбитальный эксперимент"),
+    ("schemes_on_leo.csv", "Сравнение пяти схем"),
+    ("benchmark.csv", "Бенчмарк"),
+)
+
+
+def copy_report_styles(out: Path):
+    source = Path(__file__).with_name("report.css")
+    destination = out / source.name
+    if source.resolve() != destination.resolve():
+        copyfile(source, destination)
+
+
+def ensure_plotly_assets(out: Path):
+    from plotly.offline import get_plotlyjs
+
+    copy_report_styles(out)
+    script = out / "plotly.min.js"
+    if not script.is_file():
+        script.write_text(get_plotlyjs(), encoding="utf-8")
+
+
+def write_plotly_page(figure, out, title: str, **options):
+    out = Path(out)
+    ensure_plotly_assets(out.parent)
+    graph = figure.to_html(full_html=False, include_plotlyjs="directory", **options)
+    page_title = escape(title)
+    out.write_text(f"""<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{page_title} · Спутниковая связь</title>
+<link rel="stylesheet" href="report.css">
+</head>
+<body>
+<header class="topbar"><div class="shell wide"><a href="index.html">← К отчёту</a><strong>{page_title}</strong></div></header>
+<main class="shell wide"><div class="plot-frame">{graph}</div></main>
+</body>
+</html>""", encoding="utf-8")
+
+
+def _table(title, columns, records, *, introduction="", opened=False):
+    headings = "".join(f'<th scope="col">{escape(label)}</th>' for label in columns)
+    rows = []
+    for record in records:
+        cells = "".join(f"<td>{escape(str(value))}</td>" for value in record)
+        rows.append(f"<tr>{cells}</tr>")
+    state = " open" if opened else ""
+    note = f"<p>{escape(introduction)}</p>" if introduction else ""
+    return f"""<details class="table-card"{state}>
+<summary>{escape(title)}</summary>{note}
+<div class="table-scroll"><table>
+<thead><tr>{headings}</tr></thead><tbody>{''.join(rows)}</tbody>
+</table></div>
+</details>"""
+
+
+def _orbital_table(results, threat):
+    labels = {
+        "fixed": "Фиксированный порог",
+        "fixed_refresh": "Фиксированный порог с обновлением",
+        "adaptive_refresh": "Адаптивный порог с обновлением",
+    }
+    rows = []
+    for policy, label in labels.items():
+        group = [row for row in results if row.policy == policy]
+        if not group:
+            continue
+        first = group[0]
+        quorum_times = [row.first_quorum_minute for row in group if row.first_quorum_minute is not None]
+        earliest = f"{min(quorum_times)} мин" if quorum_times else "За время прогона не достигнут"
+        rows.append((
+            label, f"{first.delivered}/{first.duration} ({first.delivered / first.duration:.0%})",
+            f"{first.longest_outage} мин", f"{len(quorum_times)}/{len(group)}", earliest,
+        ))
+    fixed_threshold = next((row.fixed_threshold for row in results if row.fixed_threshold), None)
+    refresh_interval = next((row.refresh_interval for row in results if row.refresh_interval), None)
+    description = f"Уровень угрозы для адаптивного порога {threat:g}."
+    if fixed_threshold and refresh_interval:
+        description = f"Фиксированный порог {fixed_threshold}, обновление раз в {refresh_interval} минут. {description}"
+    return _table(
+        "Орбитальный эксперимент",
+        ("Режим", "Доставлено", "Макс. простой", "Сценариев с кворумом", "Самый ранний кворум"),
+        rows, introduction=description, opened=True,
+    )
+
+
+def _cards(views, files, *, previews=False):
+    cards = []
+    for name, title, description in views:
+        if name not in files:
+            continue
+        preview = f'<img src="{name}" alt="" loading="lazy">' if previews else ""
+        cards.append(f'<a class="card" href="{name}">{preview}<strong>{title}</strong><span>{description}</span></a>')
+    return "\n".join(cards)
+
+
+def _section(identifier, title, content):
+    return f'<section id="{identifier}"><h2>{title}</h2>{content}</section>' if content else ""
+
+
+def save_index(out, history, *, comparison_rows=None, bench_sample=None, tracker=None,
+               orbital_results=(), threat=0.3):
+    out = Path(out)
+    copy_report_styles(out)
+    files = {path.name for path in out.iterdir() if path.is_file()}
     delivered = sum(row.delivered for row in history)
     handovers = sum(row.handover for row in history)
 
-    comparison_html = ""
+    interactive = _cards(INTERACTIVE_VIEWS, files)
+    gallery = _cards(STATIC_VIEWS, files, previews=True)
+    data_links = "".join(
+        f'<li><a href="{name}">{label} · CSV</a></li>'
+        for name, label in DATA_FILES if name in files
+    )
+    sections = [
+        ("views", "Интерактивные визуализации", f'<div class="card-grid">{interactive}</div>' if interactive else ""),
+        ("charts", "Графики", f'<div class="card-grid gallery">{gallery}</div>' if gallery else ""),
+        ("data", "Данные", f'<ul class="data-links">{data_links}</ul>' if data_links else ""),
+    ]
+    tables = []
+    if orbital_results:
+        tables.append(_orbital_table(orbital_results, threat))
     if comparison_rows:
-        rows = "".join(
-            f"<tr><td>{r.scheme}</td><td>{r.threshold}</td>"
-            f"<td>{r.share_bytes:.1f}</td>"
-            f"<td>{r.split_us:.1f}</td><td>{r.recover_us:.1f}</td></tr>"
-            for r in comparison_rows
-        )
-        comparison_html = f"""
-<h2>Сравнение 5 схем на LEO-модели (одна видимость)</h2>
-<table border="1" cellpadding="6" style="border-collapse:collapse">
-<tr><th>схема</th><th>k</th><th>доля, байт</th><th>split, мкс</th><th>recover, мкс</th></tr>
-{rows}
-</table>
-<p><a href="schemes_on_leo.png">Гистограмма</a> · <a href="schemes_on_leo.csv">CSV</a></p>
-"""
-
-    bench_html = ""
+        rows = ((r.scheme, r.threshold, f"{r.share_bytes:.1f}", f"{r.split_us:.1f}", f"{r.recover_us:.1f}")
+                for r in comparison_rows)
+        tables.append(_table("Сравнение пяти схем", ("Схема", "k", "Доля, байт", "Выдача, мкс",
+                                                      "Восстановление, мкс"), rows))
     if bench_sample:
-        rows = "".join(
-            f"<tr><td>{r.scheme}</td><td>{r.bits}</td><td>{r.n}</td><td>{r.threshold}</td>"
-            f"<td>{r.share_bytes:.1f}</td><td>{r.split_us:.1f}</td>"
-            f"<td>{r.recover_us:.1f}</td></tr>"
-            for r in bench_sample
-        )
-        bench_html = f"""
-<h2>Классический benchmark (128 бит, n=6, k=3)</h2>
-<table border="1" cellpadding="6" style="border-collapse:collapse">
-<tr><th>схема</th><th>бит</th><th>n</th><th>k</th><th>доля, байт</th>
-<th>split, мкс</th><th>recover, мкс</th></tr>
-{rows}
-</table>
-<p><a href="benchmark.csv">Полный CSV</a> · <a href="radar.png">Radar</a></p>
-"""
+        rows = ((r.scheme, r.bits, r.n, r.threshold, f"{r.share_bytes:.1f}", f"{r.split_us:.1f}",
+                 f"{r.recover_us:.1f}") for r in bench_sample)
+        tables.append(_table("Бенчмарк схем", ("Схема", "Бит", "n", "k", "Доля, байт", "Выдача, мкс",
+                                              "Восстановление, мкс"), rows))
+    if tracker is not None and tracker.history:
+        minute = tracker.time_to_compromise()
+        quorum = "За время прогона не достигнут" if minute is None else f"{minute} мин"
+        state = "Раскрыт по модели" if tracker.history[-1].key_exposed else "Кворум ниже порога"
+        contact_samples = any(sample.visible for sample in tracker.history)
+        quorum_share = f"{tracker.success_rate:.0%}" if contact_samples else "Отсчётов с видимостью нет"
+        tables.append(_table("Раскрытие долей в опорном сценарии", ("Показатель", "Результат"), (
+            ("Первый кворум из раскрытых долей", quorum),
+            ("Состояние ключа в конце", state),
+            ("Доля отсчётов с видимостью и накопленным кворумом", quorum_share),
+            ("Обновлений долей", tracker.refreshes),
+        )))
+    sections.append(("results", "Результаты эксперимента", "".join(tables)))
 
-    tracker_html = ""
-    if tracker is not None:
-        ttc = tracker.time_to_compromise(None)
-        ttc_str = "не достигнут" if ttc == float("inf") else f"{ttc} мин"
-        tracker_html = f"""
-<h2>Метрики атакующего (главный сценарий)</h2>
-<ul>
-<li>Успешность контакта: <b>{tracker.success_rate:.0%}</b></li>
-<li>Time-to-compromise: <b>{ttc_str}</b></li>
-<li>Попыток: {tracker.attempts}, утекло долей: {tracker.successes},
-    провалов: {tracker.failures}, refresh: {tracker.refreshes}</li>
-</ul>
-"""
+    navigation = "".join(f'<a href="#{identifier}">{label}</a>' for identifier, label, content in sections if content)
+    body = "".join(_section(*section) for section in sections)
+    primary = '<a class="primary" href="metrics_dashboard.html">Сравнить исходы атак →</a>' if "metrics_dashboard.html" in files else ""
 
     html = f"""<!doctype html>
-<html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Спутниковая связь — итоговый отчёт</title>
-<style>
-body{{max-width:58rem;margin:6vh auto;padding:0 1.4rem;font:18px/1.55 system-ui;color:#183247;background:#f8fafb}}
-h1{{font-size:clamp(2rem,5vw,3.6rem);line-height:1.1}} h2{{margin-top:2rem;font-size:1.4rem}}
-a{{color:#075b80}} li{{margin:.65rem 0}} .metric{{padding:1rem 1.3rem;border-left:4px solid #18836f;background:#eaf5f2}}
-table{{font:14px monospace;margin:.6rem 0}} th{{background:#eaf5f2}}
-</style><main><h1>Спутниковая связь: единый отчёт</h1>
-<p class="metric">За {len(history)} модельных минут доставлено <b>{delivered} пакетов</b>.
-Смен обслуживающего спутника — <b>{handovers}</b>.</p>
-
-<h2>1. Связь наземной станции</h2><ul>
-<li><a href="contacts.html">Видимость, кворум и смена узла</a> · синтетические окна 6–12 мин, порог 2 из 6.</li>
-<li><a href="contacts.csv">Журнал по минутам</a> · номер пакета, эпоха, доставка, подпись, повтор.</li>
-<li><a href="refresh.png">Proactive refresh (зубчатая пила)</a> · VSS-нулевая раздача каждые 5 дней.</li>
-</ul>
-
-<li><a href="schemes_on_leo_live.html">Живое сравнение 5 схем на одной видимости LEO</a>
-    · двигайте слайдер: Shamir/Blakley собирают ключ при 2+ видимых, XOR/CRT — только при всех n.</li>
-
-
-<h2>2. Геометрическая модель</h2><ul>
-<li><a href="simulation_3d.html">Анимация орбит</a> · слайдер времени или «Пуск».</li>
-<li><a href="metrics_dashboard.html">Метрики наблюдения долей</a> · зона станции, достижение порога.</li>
-<li><a href="attacker_accumulation.png">Накопление долей атакующим</a> · vs k.</li>
-</ul>
-
-<h2>3. Атаки и стойкость</h2><ul>
-<li><a href="compromise_step.png">Ступенька компрометации</a> · m ≥ k.</li>
-<li><a href="dynamic_k.png">Динамический порог</a> · k(t) при threat=0.3.</li>
-</ul>
-{tracker_html}
-{comparison_html}
-{bench_html}
-
-
-
-<h2>4. Демонстрация 4 схем (см. консоль)</h2>
-<p>При запуске печатается <code>telemetry_demo()</code>: 4 схемы на одной видимости LEO
-(AES-128-GCM + пороговая подпись). Это связывает <code>crypto/</code> с <code>simulation/</code>.</p>
-</main></html>"""
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Спутниковая связь · Отчёт симуляции</title>
+<link rel="stylesheet" href="report.css">
+</head>
+<body>
+<header class="topbar"><div class="shell">
+<strong>Спутниковая связь</strong><nav aria-label="Разделы отчёта">{navigation}</nav>
+</div></header>
+<main class="shell report">
+<header class="hero">
+<div><h1>Устойчивость спутниковой связи</h1>
+<p>Орбитальная модель, пороговое управление ключами и сценарии раскрытия долей.</p>{primary}</div>
+<dl aria-label="Результаты синтетического сценария">
+<div><dt>Длительность синтетического сценария</dt><dd>{len(history)} мин</dd></div>
+<div><dt>Доставлено пакетов</dt><dd>{delivered} / {len(history)}</dd></div>
+<div><dt>Смен обслуживающего узла</dt><dd>{handovers}</dd></div>
+</dl>
+</header>
+{body}
+</main>
+</body>
+</html>"""
     (out / "index.html").write_text(html, encoding="utf-8")

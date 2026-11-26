@@ -1,0 +1,82 @@
+:root {
+    color-scheme: light;
+    font: 16px/1.55 system-ui, sans-serif;
+    color: #182d42;
+    background: #edf2f7;
+    --surface: #fff;
+    --muted: #50677d;
+    --line: #d9e3ed;
+    --link: #175c86;
+    --navy: #142c47;
+    --shadow: 0 10px 30px rgba(23, 54, 80, .07);
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+a { color: var(--link); }
+:focus-visible { outline: 3px solid #338cc0; outline-offset: 4px; }
+.shell { width: min(100% - 2rem, 76rem); margin-inline: auto; }
+.shell.wide { max-width: 88rem; width: min(100% - 2rem, 88rem); }
+
+.topbar { background: #f9fbfd; border-bottom: 1px solid var(--line); }
+.topbar .shell { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: .4rem 1.5rem; padding-block: .8rem; }
+.topbar a { text-decoration: none; }
+.topbar a:hover { text-decoration: underline; }
+.topbar strong { color: var(--navy); }
+.topbar nav { display: flex; flex-wrap: wrap; gap: .45rem 1.3rem; font-size: .9rem; }
+
+.hero { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(15rem, 1fr); gap: 2rem;
+    align-items: center; margin-top: 1.4rem; padding: clamp(1.4rem, 4vw, 3.25rem);
+    border-radius: 1rem; color: #fff; background: linear-gradient(115deg, #122840, #214969); }
+.hero h1, .page-heading h1 { margin: 0; font-size: clamp(1.85rem, 4.5vw, 3.45rem);
+    line-height: 1.08; letter-spacing: -.035em; }
+.hero p { margin: .85rem 0 0; max-width: 54ch; color: #d7e5f2; }
+.hero .primary { display: inline-block; margin-top: 1.3rem; padding: .62rem 1rem; border-radius: .55rem;
+    background: #c3f2fa; color: #102b45; font-weight: 700; text-decoration: none; }
+.hero .primary:hover { background: #e5faff; }
+.hero dl { margin: 0; border: 1px solid #6c889e; border-radius: .7rem; padding: .85rem 1.1rem; }
+.hero dl div { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; padding: .35rem 0; }
+.hero dl div + div { border-top: 1px solid #6c889e; }
+.hero dt { color: #e4eef8; font-size: .9rem; }
+.hero dd { margin: 0; white-space: nowrap; font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.report section { margin-block: 2rem; }
+.report h2 { margin: 0 0 .7rem; font-size: clamp(1.25rem, 3vw, 1.75rem); letter-spacing: -.02em; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: .85rem; }
+.card { display: flex; flex-direction: column; padding: 1rem; border: 1px solid var(--line);
+    border-radius: .72rem; background: var(--surface); color: inherit; text-decoration: none; box-shadow: var(--shadow); }
+.card:hover { border-color: #78afcb; }
+.card strong { font-size: 1.05rem; color: var(--link); }
+.card span { margin-top: .3rem; color: var(--muted); font-size: .9rem; }
+.card img { display: block; width: 100%; height: 8rem; object-fit: contain; border-radius: .35rem;
+    margin-bottom: .75rem; background: #fff; }
+.gallery { grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); }
+.data-links { display: flex; flex-wrap: wrap; gap: .65rem; margin: 0; padding: 0; list-style: none; }
+.data-links a { display: inline-block; background: var(--surface); border: 1px solid var(--line);
+    padding: .48rem .7rem; border-radius: .5rem; text-decoration: none; }
+.data-links a:hover { text-decoration: underline; }
+
+.table-card, .page-heading, .plot-frame, .scenario, .replay { background: var(--surface);
+    border: 1px solid var(--line); border-radius: .72rem; box-shadow: var(--shadow); }
+.table-card { margin: .7rem 0; padding: .85rem 1rem; }
+.table-card summary { cursor: pointer; font-weight: 700; color: var(--navy); }
+.table-card p { color: var(--muted); }
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; text-align: left; font-variant-numeric: tabular-nums; }
+th, td { border-bottom: 1px solid var(--line); padding: .55rem .65rem; }
+thead th { background: #edf4fa; font-size: .86rem; }
+tbody tr:last-child td { border-bottom: 0; }
+
+.page-heading { margin-block: 1.25rem 1rem; padding: clamp(1rem, 3vw, 2rem); }
+.page-heading h1 { font-size: clamp(1.7rem, 4vw, 2.75rem); }
+.page-heading p { max-width: 70ch; margin: .6rem 0 0; color: var(--muted); }
+.plot-frame { margin-block: 1rem 2rem; min-width: 0; overflow: hidden; }
+.dashboard { padding-bottom: 2rem; }
+
+@media (max-width: 44rem) {
+    .hero { grid-template-columns: 1fr; gap: 1rem; }
+    .topbar .shell { padding-block: .65rem; }
+    .report section { margin-block: 1.4rem; }
+}

@@ -1,65 +1,55 @@
 <!doctype html>
-<html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Спутниковая связь — итоговый отчёт</title>
-<style>
-body{max-width:58rem;margin:6vh auto;padding:0 1.4rem;font:18px/1.55 system-ui;color:#183247;background:#f8fafb}
-h1{font-size:clamp(2rem,5vw,3.6rem);line-height:1.1} h2{margin-top:2rem;font-size:1.4rem}
-a{color:#075b80} li{margin:.65rem 0} .metric{padding:1rem 1.3rem;border-left:4px solid #18836f;background:#eaf5f2}
-table{font:14px monospace;margin:.6rem 0} th{background:#eaf5f2}
-</style><main><h1>Спутниковая связь: единый отчёт</h1>
-<p class="metric">За 120 модельных минут доставлено <b>30 пакетов</b>.
-Смен обслуживающего спутника — <b>6</b>.</p>
-
-<h2>1. Связь наземной станции</h2><ul>
-<li><a href="contacts.html">Видимость, кворум и смена узла</a> · синтетические окна 6–12 мин, порог 2 из 6.</li>
-<li><a href="contacts.csv">Журнал по минутам</a> · номер пакета, эпоха, доставка, подпись, повтор.</li>
-<li><a href="refresh.png">Proactive refresh (зубчатая пила)</a> · VSS-нулевая раздача каждые 5 дней.</li>
-</ul>
-
-<li><a href="schemes_on_leo_live.html">Живое сравнение 5 схем на одной видимости LEO</a>
-    · двигайте слайдер: Shamir/Blakley собирают ключ при 2+ видимых, XOR/CRT — только при всех n.</li>
-
-
-<h2>2. Геометрическая модель</h2><ul>
-<li><a href="simulation_3d.html">Анимация орбит</a> · слайдер времени или «Пуск».</li>
-<li><a href="metrics_dashboard.html">Метрики наблюдения долей</a> · зона станции, достижение порога.</li>
-<li><a href="attacker_accumulation.png">Накопление долей атакующим</a> · vs k.</li>
-</ul>
-
-<h2>3. Атаки и стойкость</h2><ul>
-<li><a href="compromise_step.png">Ступенька компрометации</a> · m ≥ k.</li>
-<li><a href="dynamic_k.png">Динамический порог</a> · k(t) при threat=0.3.</li>
-</ul>
-
-<h2>Метрики атакующего (главный сценарий)</h2>
-<ul>
-<li>Успешность контакта: <b>0%</b></li>
-<li>Time-to-compromise: <b>не достигнут</b></li>
-<li>Попыток: 120, утекло долей: 37,
-    провалов: 120, refresh: 3</li>
-</ul>
-
-
-<h2>Сравнение 5 схем на LEO-модели (одна видимость)</h2>
-<table border="1" cellpadding="6" style="border-collapse:collapse">
-<tr><th>схема</th><th>k</th><th>доля, байт</th><th>split, мкс</th><th>recover, мкс</th></tr>
-<tr><td>shamir</td><td>3</td><td>33.0</td><td>3.9</td><td>3.3</td></tr><tr><td>blakley</td><td>3</td><td>128.0</td><td>13.1</td><td>9.7</td></tr><tr><td>feldman_vss</td><td>3</td><td>96.0</td><td>121.8</td><td>3.0</td></tr><tr><td>xor</td><td>6</td><td>17.0</td><td>5.0</td><td>1.9</td></tr><tr><td>crt</td><td>6</td><td>17.0</td><td>5.4</td><td>3.8</td></tr>
-</table>
-<p><a href="schemes_on_leo.png">Гистограмма</a> · <a href="schemes_on_leo.csv">CSV</a></p>
-
-
-<h2>Классический benchmark (128 бит, n=6, k=3)</h2>
-<table border="1" cellpadding="6" style="border-collapse:collapse">
-<tr><th>схема</th><th>бит</th><th>n</th><th>k</th><th>доля, байт</th>
-<th>split, мкс</th><th>recover, мкс</th></tr>
-<tr><td>Шамир</td><td>128</td><td>6</td><td>3</td><td>33.0</td><td>3.4</td><td>2.8</td></tr><tr><td>Блэкли</td><td>128</td><td>6</td><td>3</td><td>128.0</td><td>12.7</td><td>9.7</td></tr><tr><td>XOR</td><td>128</td><td>6</td><td>6</td><td>17.0</td><td>4.3</td><td>1.0</td></tr><tr><td>CRT</td><td>128</td><td>6</td><td>6</td><td>26.0</td><td>4.9</td><td>2.9</td></tr>
-</table>
-<p><a href="benchmark.csv">Полный CSV</a> · <a href="radar.png">Radar</a></p>
-
-
-
-
-<h2>4. Демонстрация 4 схем (см. консоль)</h2>
-<p>При запуске печатается <code>telemetry_demo()</code>: 4 схемы на одной видимости LEO
-(AES-128-GCM + пороговая подпись). Это связывает <code>crypto/</code> с <code>simulation/</code>.</p>
-</main></html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Спутниковая связь · Отчёт симуляции</title>
+<link rel="stylesheet" href="report.css">
+</head>
+<body>
+<header class="topbar"><div class="shell">
+<strong>Спутниковая связь</strong><nav aria-label="Разделы отчёта"><a href="#views">Интерактивные визуализации</a><a href="#charts">Графики</a><a href="#data">Данные</a><a href="#results">Результаты эксперимента</a></nav>
+</div></header>
+<main class="shell report">
+<header class="hero">
+<div><h1>Устойчивость спутниковой связи</h1>
+<p>Орбитальная модель, пороговое управление ключами и сценарии раскрытия долей.</p><a class="primary" href="metrics_dashboard.html">Сравнить исходы атак →</a></div>
+<dl aria-label="Результаты синтетического сценария">
+<div><dt>Длительность синтетического сценария</dt><dd>120 мин</dd></div>
+<div><dt>Доставлено пакетов</dt><dd>120 / 120</dd></div>
+<div><dt>Смен обслуживающего узла</dt><dd>26</dd></div>
+</dl>
+</header>
+<section id="views"><h2>Интерактивные визуализации</h2><div class="card-grid"><a class="card" href="metrics_dashboard.html"><strong>Исходы атак</strong><span>Сравните раскрытые доли, доставку и состояние ключа в двух сценариях.</span></a>
+<a class="card" href="simulation_3d.html"><strong>Орбиты и зона видимости</strong><span>Настройте созвездие и порог. Сравните кворум станции с раскрытиями долей.</span></a>
+<a class="card" href="contact_risk.html"><strong>Риск раскрытия при радиоконтакте</strong><span>Меняйте длительность контакта и вероятность раскрытия доли.</span></a>
+<a class="card" href="contacts.html"><strong>Связь наземной станции</strong><span>Посмотрите кворум, смену обслуживающего спутника и результат проверки подписи.</span></a>
+<a class="card" href="schemes_on_leo_live.html"><strong>Сравнение пяти схем</strong><span>Сопоставьте доступность кворума на общей орбитальной трассе.</span></a></div></section><section id="charts"><h2>Графики</h2><div class="card-grid gallery"><a class="card" href="attacker_accumulation.png"><img src="attacker_accumulation.png" alt="" loading="lazy"><strong>Накопление долей</strong><span>Раскрытые доли текущей эпохи и порог.</span></a>
+<a class="card" href="compromise_step.png"><img src="compromise_step.png" alt="" loading="lazy"><strong>Граница восстановления</strong><span>Зависимость восстановления ключа от числа подлинных долей.</span></a>
+<a class="card" href="refresh.png"><img src="refresh.png" alt="" loading="lazy"><strong>Обновление долей</strong><span>Смена эпох в учебной модели накопления.</span></a>
+<a class="card" href="dynamic_k.png"><img src="dynamic_k.png" alt="" loading="lazy"><strong>Адаптивный порог</strong><span>Выбор порога по видимости и заданному уровню угрозы.</span></a>
+<a class="card" href="schemes_on_leo.png"><img src="schemes_on_leo.png" alt="" loading="lazy"><strong>Характеристики пяти схем</strong><span>Размер долей и время вычислений.</span></a>
+<a class="card" href="radar.png"><img src="radar.png" alt="" loading="lazy"><strong>Сводка бенчмарка</strong><span>Сравнение времени и размеров в одном сценарии.</span></a></div></section><section id="data"><h2>Данные</h2><ul class="data-links"><li><a href="contacts.csv">Журнал контактов · CSV</a></li><li><a href="orbital_experiment.csv">Орбитальный эксперимент · CSV</a></li><li><a href="schemes_on_leo.csv">Сравнение пяти схем · CSV</a></li><li><a href="benchmark.csv">Бенчмарк · CSV</a></li></ul></section><section id="results"><h2>Результаты эксперимента</h2><details class="table-card" open>
+<summary>Орбитальный эксперимент</summary><p>Фиксированный порог 3, обновление раз в 30 минут. Уровень угрозы для адаптивного порога 0.01.</p>
+<div class="table-scroll"><table>
+<thead><tr><th scope="col">Режим</th><th scope="col">Доставлено</th><th scope="col">Макс. простой</th><th scope="col">Сценариев с кворумом</th><th scope="col">Самый ранний кворум</th></tr></thead><tbody><tr><td>Фиксированный порог</td><td>2/120 (2%)</td><td>53 мин</td><td>4/4</td><td>17 мин</td></tr><tr><td>Фиксированный порог с обновлением</td><td>2/120 (2%)</td><td>53 мин</td><td>2/4</td><td>17 мин</td></tr><tr><td>Адаптивный порог с обновлением</td><td>67/120 (56%)</td><td>6 мин</td><td>4/4</td><td>9 мин</td></tr></tbody>
+</table></div>
+</details><details class="table-card">
+<summary>Сравнение пяти схем</summary>
+<div class="table-scroll"><table>
+<thead><tr><th scope="col">Схема</th><th scope="col">k</th><th scope="col">Доля, байт</th><th scope="col">Выдача, мкс</th><th scope="col">Восстановление, мкс</th></tr></thead><tbody><tr><td>shamir</td><td>3</td><td>33.0</td><td>19.1</td><td>18.9</td></tr><tr><td>blakley</td><td>3</td><td>128.0</td><td>76.1</td><td>63.0</td></tr><tr><td>feldman_vss</td><td>3</td><td>96.0</td><td>494.5</td><td>18.6</td></tr><tr><td>xor</td><td>6</td><td>17.0</td><td>17.6</td><td>13.6</td></tr><tr><td>crt</td><td>6</td><td>17.0</td><td>22.9</td><td>20.3</td></tr></tbody>
+</table></div>
+</details><details class="table-card">
+<summary>Бенчмарк схем</summary>
+<div class="table-scroll"><table>
+<thead><tr><th scope="col">Схема</th><th scope="col">Бит</th><th scope="col">n</th><th scope="col">k</th><th scope="col">Доля, байт</th><th scope="col">Выдача, мкс</th><th scope="col">Восстановление, мкс</th></tr></thead><tbody><tr><td>Шамир</td><td>128</td><td>6</td><td>3</td><td>33.0</td><td>19.7</td><td>17.6</td></tr><tr><td>Блэкли</td><td>128</td><td>6</td><td>3</td><td>128.0</td><td>78.3</td><td>91.5</td></tr><tr><td>XOR</td><td>128</td><td>6</td><td>6</td><td>17.0</td><td>12.8</td><td>7.5</td></tr><tr><td>CRT</td><td>128</td><td>6</td><td>6</td><td>26.0</td><td>16.9</td><td>13.6</td></tr></tbody>
+</table></div>
+</details><details class="table-card">
+<summary>Раскрытие долей в опорном сценарии</summary>
+<div class="table-scroll"><table>
+<thead><tr><th scope="col">Показатель</th><th scope="col">Результат</th></tr></thead><tbody><tr><td>Первый кворум из раскрытых долей</td><td>За время прогона не достигнут</td></tr><tr><td>Состояние ключа в конце</td><td>Кворум ниже порога</td></tr><tr><td>Доля отсчётов с видимостью и накопленным кворумом</td><td>0%</td></tr><tr><td>Обновлений долей</td><td>3</td></tr></tbody>
+</table></div>
+</details></section>
+</main>
+</body>
+</html>

@@ -1,0 +1,13 @@
+policy,exposure_interval,first_quorum_minute,duration,delivered,longest_outage,refreshes,fixed_threshold,threat,refresh_interval,active_key_exposed
+fixed,15,31,120,2,53,0,3,,,True
+fixed,8,17,120,2,53,0,3,,,True
+fixed,10,21,120,2,53,0,3,,,True
+fixed,20,41,120,2,53,0,3,,,True
+fixed_refresh,15,,120,2,53,3,3,,30,False
+fixed_refresh,8,17,120,2,53,3,3,,30,True
+fixed_refresh,10,21,120,2,53,3,3,,30,True
+fixed_refresh,20,,120,2,53,3,3,,30,False
+adaptive_refresh,15,16,120,67,6,3,,0.01,30,True
+adaptive_refresh,8,9,120,67,6,3,,0.01,30,True
+adaptive_refresh,10,11,120,67,6,3,,0.01,30,True
+adaptive_refresh,20,21,120,67,6,3,,0.01,30,True

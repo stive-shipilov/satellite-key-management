@@ -1,32 +1,32 @@
 """Единый отчёт: орбиты + 5 схем + атаки + benchmark + demo.
 
 Запуск:
-    python -m satellite_key_management --out results
+    satellite-key-management --out results
 """
 from __future__ import annotations
 
 import argparse
 import platform
-import secrets
 from dataclasses import asdict
 from pathlib import Path
-from statistics import median
-from timeit import repeat
 
 import pandas as pd
 
-from satellite_key_management.analysis.benchmark import Measurement, byte_width, measure
+from satellite_key_management.analysis.benchmark import measure
 from satellite_key_management.analysis.demo import telemetry_demo
 from satellite_key_management.analysis.plots import bar_chart, radar_chart
-from satellite_key_management.attacks.attacks import AttackerTracker
 from satellite_key_management.simulation.contact_session import (
     save_contact_history,
     session_history,
 )
 from satellite_key_management.simulation.leo_model import LEOModel
+from satellite_key_management.simulation.orbital_experiment import simulate_orbital_sessions
 from satellite_key_management.simulation.session import SessionSimulator
 from satellite_key_management.visualization.animation_plotly import animate_with_metrics
-from satellite_key_management.visualization.metrics_dashboard import build_metrics_dashboard
+from satellite_key_management.visualization.attack_dashboard import save_attack_dashboard
+from satellite_key_management.visualization.orbit_view import (
+    DEFAULT_OBSERVER, DEMO_GROUPS, orbit_config, save_contact_risk_page,
+)
 from satellite_key_management.visualization.report import save_index
 from satellite_key_management.visualization.scheme_comparison_leo import build_scheme_comparison_leo, \
     compare_schemes_on_leo
@@ -44,56 +44,52 @@ from satellite_key_management.visualization.static_plots import (
 def run(out: Path, minutes: int, step: int, threat: float = 0.3):
     if min(minutes, step) < 1:
         raise ValueError("Длительность и шаг должны быть положительными")
+    if not 0 <= threat <= 1:
+        raise ValueError("Уровень угрозы должен быть в диапазоне [0, 1]")
     out.mkdir(parents=True, exist_ok=True)
 
     # -------- 1. Единая LEO-модель и главный SessionSimulator -------------
-    leo = LEOModel(n_sats=36, seed=7, n_planes=6)
-    sim = SessionSimulator(leo, n=36, k=12, scheme="feldman_vss")
+    leo = LEOModel(n_sats=72, seed=7, n_planes=6)
+    sim = SessionSimulator(leo, n=len(leo.sats), k=3)
     sim.distribute()
 
     # -------- 2. Синтетические окна 6–12 мин ------------------------------
     history = session_history(minutes)
     save_contact_history(history, out)
 
-    # -------- 3. Атаки на главный sim ------------------------------------
-    # AttackerTracker в текущем attacks.py принимает attacker_lat/attacker_lon.
-    tracker = AttackerTracker(
-        sim, attacker_lat=-30.0, attacker_lon=-60.0, refresh_every=30
+    # -------- 3. Кворум, защищённая доставка и раскрытие долей ------------
+    trials, tracker = simulate_orbital_sessions(leo, minutes, k=sim.k, threat=threat)
+    orbital_results = [trial.result for trial in trials]
+    pd.DataFrame([asdict(row) for row in orbital_results]).convert_dtypes().to_csv(
+        out / "orbital_experiment.csv", index=False
     )
-    try:
-        plot_compromise_step(sim, out / "compromise_step.png")
-    except Exception as exc:  # noqa: BLE001
-        print(f"[skip] compromise_step: {exc}", flush=True)
-    try:
-        plot_refresh_sawtooth(sim, out / "refresh.png")
-    except Exception as exc:  # noqa: BLE001
-        print(f"[skip] refresh_sawtooth: {exc}", flush=True)
-    try:
-        plot_dynamic_k(sim, out / "dynamic_k.png", t_total=minutes)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[skip] dynamic_k: {exc}", flush=True)
+    plot_compromise_step(sim, out / "compromise_step.png")
+    plot_refresh_sawtooth(sim, out / "refresh.png")
+    plot_dynamic_k(sim, out / "dynamic_k.png", t_total=minutes, threat=threat)
 
     # -------- 4. Орбиты и метрики атакующего ------------------------------
-    _, tracker_anim = animate_with_metrics(
+    # Demonstration profile with both contact and outage at k=3.
+    demo_leo = LEOModel(n_sats=120, n_planes=6)
+    animate_with_metrics(
         sim, t_total=minutes, step=step,
         out_html=str(out / "simulation_3d.html"),
-        gs_lat=-30.0, gs_lon=-60.0, refresh_every=30,
+        gs_lat=55.0, gs_lon=37.0, tracker=tracker, scenario_leo=demo_leo, orbit_groups=DEMO_GROUPS,
     )
-    leo_vis = LEOModel(n_sats=72, seed=7, n_planes=12)
+    contact_demo = orbit_config(demo_leo, 120, 1, 55.0, 37.0, sim.k, 30, groups=DEMO_GROUPS)
+    save_contact_risk_page(out / "contact_risk.html", contact_demo, DEFAULT_OBSERVER)
+    save_attack_dashboard(trials, history, out / "metrics_dashboard.html")
     build_scheme_comparison_leo(
-        leo_vis,
-        gs_lat=0.0, gs_lon=0.0,  # жертва — экватор, Гвинейский залив
-        attacker_lat=5.0, attacker_lon=10.0,  # атакующий — ~800 км от жертвы
+        demo_leo,
+        gs_lat=55.0, gs_lon=37.0,
+        attacker_lat=DEFAULT_OBSERVER["lat"], attacker_lon=DEFAULT_OBSERVER["lon"],
         minutes=minutes,
         step=1,
-        n=72,
-        k_shamir=6,
+        n=len(demo_leo.sats),
+        k_shamir=sim.k,
         out_html=str(out / "schemes_on_leo_live.html"),
+        orbit_groups=DEMO_GROUPS,
     )
-    try:
-        plot_attacker_accumulation(tracker_anim, out / "attacker_accumulation.png")
-    except Exception as exc:  # noqa: BLE001
-        print(f"[skip] attacker_accumulation: {exc}", flush=True)
+    plot_attacker_accumulation(tracker, out / "attacker_accumulation.png")
 
     # -------- 5. Сравнение 5 схем на фиксированных n, k -------------------
     comparison_rows = compare_schemes_on_leo(leo, bits=128, n=6, k=3)
@@ -145,7 +141,9 @@ def run(out: Path, minutes: int, step: int, threat: float = 0.3):
         out, history,
         comparison_rows=comparison_rows,
         bench_sample=sample,
-        tracker=tracker_anim,
+        tracker=tracker,
+        orbital_results=orbital_results,
+        threat=threat,
     )
     print(f"\nГотово. Откройте {out / 'index.html'}", flush=True)
 

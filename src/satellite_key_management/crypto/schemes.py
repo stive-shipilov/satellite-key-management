@@ -80,12 +80,12 @@ class SchemeAdapter:
     def verify_share(self, sid: int, share: tuple, ss: ShareSet) -> bool:
         if not ss.verifiable:
             return True  # доверенный дилер
-        return self.impl.verify_share(share, list(ss.commitments))
+        return self.impl.verify_share(share, ss.commitments)
 
     def verify_reconstructed(self, secret_int: int, ss: ShareSet) -> bool:
         if not ss.verifiable:
             return True
-        return self.impl.verify_reconstructed(secret_int, list(ss.commitments))
+        return self.impl.verify_reconstructed(secret_int, ss.commitments)
 
     # -- восстановление ----------------------------------------------------
     def reconstruct(self, selected) -> int:

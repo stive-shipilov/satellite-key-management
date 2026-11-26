@@ -66,3 +66,86 @@ def test_session_reissues_for_new_threshold_and_waits_without_quorum(monkeypatch
     assert sim.secret_key == 9 and sim.collect_and_reconstruct(0) == (True, 3)
     sim.distribute_adaptive(0, 0.4)
     assert sim.secret_key == 8 and sim.k == 3 and sim.collect_and_reconstruct(0)[0]
+
+
+@pytest.mark.parametrize("name", ["xor", "crt"])
+def test_all_party_schemes_keep_their_threshold(name):
+    sim = SessionSimulator(None, n=3, k=3, scheme=name)
+    sim.distribute()
+    session_id = sim.session_id
+    assert sim.distribute_adaptive(0, visible=[1, 2]) is None
+    assert sim.session_id == session_id
+    sim.distribute_adaptive(1, visible=[1, 2, 3])
+    assert sim.session_id != session_id and sim.k == sim.scheme.k == 3
+    assert sim.receive(sim.seal(b"message"), [1, 2, 3]) == b"message"
+
+
+def test_failed_redistribution_leaves_active_session_usable(monkeypatch):
+    from satellite_key_management.crypto.schemes import SchemeAdapter
+
+    sim = SessionSimulator(None, n=3, k=2)
+    sim.distribute()
+    packet = sim.seal(b"existing session")
+    session_id, epoch, scheme = sim.session_id, sim.epoch, sim.scheme
+
+    def fail_new_distribution(self, key):
+        raise ValueError("Раздача прервана")
+
+    monkeypatch.setattr(SchemeAdapter, "split", fail_new_distribution)
+    with pytest.raises(ValueError, match="Раздача прервана"):
+        sim.distribute_adaptive(0, visible=[1, 2, 3])
+    assert (sim.session_id, sim.epoch, sim.scheme) == (session_id, epoch, scheme)
+    assert sim.receive(packet, [1, 2]) == b"existing session"
+
+
+def test_orbital_comparison_pairs_exposures_and_measures_delivery(tmp_path):
+    import json
+
+    from satellite_key_management.simulation.orbital_experiment import simulate_orbital_sessions
+    from satellite_key_management.visualization.attack_dashboard import save_attack_dashboard
+
+    class Sky:
+        sats = range(4)
+
+        def visible_at(self, minute):
+            return [1, 2, 3] if minute % 2 == 0 else [1, 2]
+
+    trials, tracker = simulate_orbital_sessions(Sky(), 33, k=3, threat=0)
+    cases = {trial.result.policy: trial.result for trial in trials if trial.result.exposure_interval == 15}
+    assert cases["fixed"].first_quorum_minute == 31
+    assert cases["fixed_refresh"].first_quorum_minute is None
+    assert cases["fixed"].delivered == cases["fixed_refresh"].delivered == 17
+    assert cases["adaptive_refresh"].delivered == 33
+    assert cases["fixed"].longest_outage == 1 and cases["adaptive_refresh"].longest_outage == 0
+    assert tracker.refreshes == 1 and tracker.history[30].epoch == 2
+
+    dashboard = tmp_path / "metrics_dashboard.html"
+    save_attack_dashboard(trials, [], dashboard)
+    html = dashboard.read_text(encoding="utf-8")
+    data, _ = json.JSONDecoder().raw_decode(html.split("const data = ", 1)[1])
+    assert sum(len(group) for group in data["cases"].values()) == 12
+    paired = data["cases"]["15"]
+    assert paired["fixed"]["firstQuorum"] == 31
+    assert paired["fixed_refresh"]["firstQuorum"] is None
+    assert paired["fixed_refresh"]["timeline"][30]["event"] == "refresh"
+    assert paired["fixed_refresh"]["timeline"][31]["verified"] == 2
+    assert paired["fixed_refresh"]["timeline"][31]["delivered"] is False
+    exposed = data["cases"]["8"]["fixed_refresh"]
+    assert exposed["firstQuorum"] == 17 and exposed["timeline"][17]["exposures"]
+    assert exposed["timeline"][30]["shares"] == 0 and exposed["timeline"][30]["keyExposed"]
+    assert (tmp_path / "plotly.min.js").is_file()
+
+
+def test_orbital_trace_distinguishes_start_rotation_and_refresh():
+    from satellite_key_management.simulation.orbital_experiment import simulate_orbital_sessions
+
+    class Sky:
+        sats = range(5)
+
+        def visible_at(self, minute):
+            return ([], [1, 2], [1, 2, 3, 4, 5])[min(minute, 2)]
+
+    trials, _ = simulate_orbital_sessions(Sky(), 5, k=3, threat=0, refresh_every=2)
+    adaptive = next(trial for trial in trials if trial.result.policy == "adaptive_refresh")
+    assert [row.key_event for row in adaptive.reception] == [None, "start", "rotate", None, "refresh"]
+    assert [row.delivered for row in adaptive.reception] == [False, True, True, True, True]

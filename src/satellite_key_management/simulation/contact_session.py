@@ -5,7 +5,8 @@ from dataclasses import asdict, dataclass
 from random import Random
 
 from ..crypto.threshold_sig import generate_key, sign_share, combine_signs
-from .session import SessionSimulator
+from ..visualization.report import write_plotly_page
+from .session import ReplayRejected, SessionSimulator
 
 
 class ContactSchedule:
@@ -34,6 +35,7 @@ class Contact:
     delivered: bool
     signature_verified: bool
     replay_rejected: bool
+    replay_reason: str | None = None
 
 
 def session_history(minutes, refresh_every=30):
@@ -54,8 +56,9 @@ def session_history(minutes, refresh_every=30):
         message = f"telemetry/minute={t}".encode()
         signature = None
         if not signed and len(visible) >= sim.k:
-            partials = [sign_share(shares[i - 1], message) for i in visible[: sim.k]]
-            signature = combine_signs(partials, message, public)
+            signed_payload = sim.signing_payload(sim.next_sequence, message)
+            partials = [sign_share(shares[i - 1], signed_payload) for i in visible[: sim.k]]
+            signature = combine_signs(partials, signed_payload, public)
         packet = sim.seal(message + (signature or b""))
         received = sim.receive(packet, visible)
         checked = rejected = False
@@ -64,7 +67,7 @@ def session_history(minutes, refresh_every=30):
                 checked = signed = True
                 try:
                     sim.receive(packet, visible)
-                except ValueError:
+                except ReplayRejected:
                     rejected = True
                 if not rejected:
                     raise RuntimeError("Приёмник повторно принял пакет")
@@ -80,6 +83,7 @@ def session_history(minutes, refresh_every=30):
                 received is not None,
                 checked,
                 rejected,
+                "duplicate" if rejected else None,
             )
         )
     return history
@@ -90,7 +94,7 @@ def save_contact_history(history, out):
     from plotly.subplots import make_subplots
 
     with (out / "contacts.csv").open("w", newline="", encoding="utf-8") as stream:
-        writer = csv.DictWriter(stream, fieldnames=list(asdict(history[0])))
+        writer = csv.DictWriter(stream, fieldnames=list(asdict(history[0])), lineterminator="\n")
         writer.writeheader()
         writer.writerows(map(asdict, history))
     fig = make_subplots(
@@ -150,4 +154,4 @@ def save_contact_history(history, out):
         height=640,
         legend=dict(orientation="h", y=-0.15),
     )
-    fig.write_html(out / "contacts.html", include_plotlyjs="directory")
+    write_plotly_page(fig, out / "contacts.html", "Связь наземной станции")

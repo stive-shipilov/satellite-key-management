@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Sequence
 
 
 # --- Параметры группы (сгенерированы заранее, безопасное простое p = 2q+1) ---
@@ -30,12 +31,12 @@ SAFE_G = 8658659276072068354748097288823447273570217079269105411067
 class FeldmanVSS:
     """Схема верифицируемого разделения секрета по Фельдману.
 
-    Параметры по умолчанию — безопасная группа, сгенерированная выше.
+    Параметры по умолчанию предназначены для демонстрации арифметики.
     """
 
     def __init__(self, p: int = SAFE_P, q: int = SAFE_Q, g: int = SAFE_G):
-        if not (1 < q < p):
-            raise ValueError("Должно быть 1 < q < p (p — безопасное простое)")
+        if not (1 < q < p and (p - 1) % q == 0 and 1 < g < p and pow(g, q, p) == 1):
+            raise ValueError("Параметры не согласованы с подгруппой порядка q")
         self.p = p
         self.q = q
         self.g = g
@@ -55,8 +56,8 @@ class FeldmanVSS:
             commitments — список обязательств g^{a_j} mod p на каждый
                           коэффициент полинома (всего k штук).
         """
-        if not (1 <= k <= n):
-            raise ValueError("Должно выполняться 1 <= k <= n")
+        if not (1 <= k <= n < self.q):
+            raise ValueError("Должно выполняться 1 <= k <= n < q")
         if not (0 <= secret < self.q):
             raise ValueError(f"Секрет должен лежать в [0, {self.q})")
         coeffs = [secret % self.q] + [secrets.randbelow(self.q) for _ in range(k - 1)]
@@ -64,7 +65,7 @@ class FeldmanVSS:
         commitments = [pow(self.g, a, self.p) for a in coeffs]
         return shares, commitments
 
-    def verify_share(self, share: tuple[int, int], commitments: list[int]) -> bool:
+    def verify_share(self, share: tuple[int, int], commitments: Sequence[int]) -> bool:
         """Проверить, что доля (i, s_i) согласована с публичными обязательствами.
 
         g^{s_i} должно равняться Π_j (g^{a_j})^{i^j} mod p. Секрет не раскрывается.
@@ -78,9 +79,9 @@ class FeldmanVSS:
             rhs = (rhs * pow(C_j, pow(i, j, self.q), self.p)) % self.p
         return lhs == rhs
 
-    def verify_reconstructed(self, secret: int, commitments: list[int]) -> bool:
+    def verify_reconstructed(self, secret: int, commitments: Sequence[int]) -> bool:
         """Публичная проверка восстановленного секрета: g^secret == C_0."""
-        return pow(self.g, secret, self.p) == commitments[0]
+        return bool(commitments) and 0 <= secret < self.q and pow(self.g, secret, self.p) == commitments[0]
 
     def reconstruct(self, shares: list[tuple[int, int]]) -> int:
         """Интерполяция Лагранжа в точке 0 в Z_q — восстановить секрет."""

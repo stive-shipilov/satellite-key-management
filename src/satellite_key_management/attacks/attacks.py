@@ -1,13 +1,15 @@
 """Учебные проверки при пассивном чтении долей и наблюдении модельных окон."""
-import math
 from copy import copy
+from dataclasses import dataclass
+
+from satellite_key_management.simulation.session import ReplayRejected
 
 
 def compromise_m(sim, m):
     if not 0 <= m <= sim.n:
         raise ValueError("Число долей вне диапазона")
     key, count = sim.verified_key(range(1, m + 1))
-    return key is not None and sim.vss.verify_reconstructed(key, sim.commitments), count
+    return key is not None, count
 
 
 def evil_dealer(sim, tamper_sid=3):
@@ -23,15 +25,12 @@ def share_accumulation(sim, days=30, refresh_every=5):
         raise ValueError("Некорректный период")
     model = copy(sim)
     model.distribute()
-    current = set()
-    history = []
+    tracker = AttackerTracker(model)
     for day in range(days):
         if day and day % refresh_every == 0:
             model.refresh()
-            current.clear()
-        current.add(day % model.n + 1)
-        history.append(len(current))
-    return history
+        tracker.step(day, (), (day % model.n + 1,))
+    return [row.shares for row in tracker.history]
 
 
 def replay_attack(sim, t_min):
@@ -42,62 +41,75 @@ def replay_attack(sim, t_min):
         return False, False
     try:
         sim.receive(packet, members)
-    except ValueError:
+    except ReplayRejected:
         return True, False
     return True, True
 
 
+@dataclass(frozen=True)
+class ExposureSample:
+    minute: int
+    visible: tuple[int, ...]
+    shares: int
+    threshold: int
+    epoch: int
+    quorum_reached: bool
+    key_exposed: bool
+    new_exposures: tuple[int, ...] = ()
+
+
 class AttackerTracker:
-    def __init__(self, sim, attacker_lat=-30.0, attacker_lon=-60.0,
-                 k_target=None, refresh_every=None):
+    """Учёт заданных сценарием событий раскрытия долей без доступа к значениям."""
+
+    def __init__(self, sim):
         self.sim = sim
-        self.lat = attacker_lat
-        self.lon = attacker_lon
-        self.k_target = k_target if k_target is not None else sim.k
-        self.refresh_every = refresh_every
-        self.shares_collected = set()
-        self.attempts = 0
-        self.successes = 0
-        self.failures = 0
+        self.observations: dict[tuple[bytes, int], set[int]] = {}
+        self.exposed_keys: set[bytes] = set()
+        self._session_id = sim.session_id
+        self._epoch = sim.epoch
         self.refreshes = 0
-        self.history = []
+        self.history: list[ExposureSample] = []
 
-    def step(self, t_min):
-        # proactive refresh: обнуляем накопленные доли
-        refreshed = False
-        if self.refresh_every and self.history:
-            crossed = t_min // self.refresh_every - self.history[-1][0] // self.refresh_every
-            if crossed > 0:
-                self.shares_collected.clear()
-                self.refreshes += crossed
-                refreshed = True
+    def step(self, minute, visible, exposed=()):
+        session_id, epoch = self.sim.session_id, self.sim.epoch
+        if session_id == self._session_id and self._epoch:
+            self.refreshes += epoch - self._epoch
+        self._session_id, self._epoch = session_id, epoch
 
-        in_zone = self.sim.leo.visible_at(t_min, self.lat, self.lon, radius_km=2500)
-        new_shares = [sid for sid in in_zone if sid not in self.shares_collected]
-        if in_zone:
-            self.attempts += 1
-        if new_shares:
-            self.successes += len(new_shares)
-            self.shares_collected.update(new_shares)
-        if len(self.shares_collected) < self.k_target and in_zone:
-            self.failures += 1
-        self.history.append((t_min, len(self.shares_collected), len(in_zone)))
-        return {
-            "in_zone": in_zone,
-            "n_visible": len(in_zone),
-            "n_shares": len(self.shares_collected),
-            "k": self.k_target,
-            "compromised": len(self.shares_collected) >= self.k_target,
-            "refreshed": refreshed,
-        }
+        current = self.observations.setdefault((session_id, epoch), set())
+        new_exposures = ()
+        if self.sim.shares is not None:
+            new_exposures = tuple(sorted({sid for sid in exposed if 1 <= sid <= self.sim.n} - current))
+            current.update(new_exposures)
+        quorum = len(current) >= self.sim.k
+        if quorum:
+            self.exposed_keys.add(session_id)
+        sample = ExposureSample(
+            minute, tuple(sorted(set(visible))), len(current), self.sim.k,
+            epoch, quorum, session_id in self.exposed_keys, new_exposures,
+        )
+        self.history.append(sample)
+        return sample
 
-    def time_to_compromise(self, times):
-        for t, n_shares, _ in self.history:
-            if n_shares >= self.k_target:
-                return t
-        return math.inf
+    def time_to_compromise(self):
+        return next((sample.minute for sample in self.history if sample.quorum_reached), None)
 
     @property
     def success_rate(self):
         """Доля отсчётов с контактом, в которых уже накоплен кворум."""
-        return (self.attempts - self.failures) / self.attempts if self.attempts else 0.0
+        contact_samples = [sample for sample in self.history if sample.visible]
+        if not contact_samples:
+            return 0.0
+        return sum(sample.quorum_reached for sample in contact_samples) / len(contact_samples)
+
+
+def track_visibility(sim, minutes, lat, lon, *, radius_km=None, refresh_every=None):
+    """Трасса видимости для автономного графика, без событий раскрытия долей."""
+    model = copy(sim)
+    tracker = AttackerTracker(model)
+    for minute in range(minutes):
+        if model.shares is not None and refresh_every and minute and minute % refresh_every == 0:
+            model.refresh()
+        visible = model.leo.visible_at(minute, lat, lon, radius_km=radius_km)
+        tracker.step(minute, visible)
+    return tracker
